@@ -1,4 +1,4 @@
 interface:
   display_name: "Review Guard 评审守卫"
-  short_description: "精确范围、只读、证据优先的 Go 代码评审"
-  default_prompt: "使用 $review-guard 评审精确的 Go 变更范围，并用中文返回有证据支撑的简洁结论。"
+  short_description: "高召回发现、精确证据收敛的 Go 代码评审"
+  default_prompt: "使用 $review-guard 对精确的 Go 变更范围执行独立风险视角评审，并用中文返回缺陷、待确认风险与覆盖证据。"
