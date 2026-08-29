@@ -75,10 +75,13 @@ ln -s ../../.agents/skills/review-guard ~/.codex/skills/review-guard
 
 ## 更新本地安装
 
-如果安装使用软链接，拉取仓库即可更新：
+不要再把 Git 仓库内容复制到运行时目录。所有运行时目录都只保留指向本仓库的软链接，因此拉取仓库就是更新本地安装：
 
 ```bash
+cd <repo>
 git pull --ff-only
 ```
 
-更新后重新运行校验；已有长期运行的 Agent loop 建议重新载入对应 Skill，避免继续使用旧会话中的缓存指令。
+Claude Code 支持 `~/.claude/skills/<skill-name>` 指向磁盘其他位置的目录软链接，并监听现有 Skill 目录中的 `SKILL.md` 变化；普通 Skill 文本更新可以在当前会话被检测到。如果顶层 Skill 目录是在会话启动后才首次创建，则重启一次 Claude Code。
+
+Codex 或其他运行时是否热加载由其自身版本决定。更新后应重新运行校验；已有长期运行的 Agent loop 建议重新载入对应 Skill，避免继续使用旧会话中的缓存指令。
