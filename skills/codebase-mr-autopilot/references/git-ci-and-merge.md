@@ -38,7 +38,7 @@ git rebase --autostash refs/codebase-mr-autopilot/<mr-key>/target
 
 只有预期批次路径均已 stage 且完成核对后，才能使用 `--autostash`。把 fetch 得到的 target head 与最近一次有效评审绑定的 head 比较。rebase 后，在测试或 commit 前验证预期 staged 变更已恢复。
 
-- target 未变化：所需提交前 rebase 应为 no-op；之后重新运行受影响验证。
+- target 未变化：所需提交前 rebase 应为 no-op。只有 [execution-core.md](execution-core.md) 的 no-op 复用条件全部成立时，才复用已绑定验证；否则重新运行受影响验证。
 - target 已前进：rebase 会使旧评审绑定失效。直接 `commit_reply` 步骤重新运行受影响验证、计算新的 worktree diff hash、写入重新绑定请求产物，并把最早未使用的 `review_r2` 或 `review_r3` 返回给主控。主控直接派发该评审步骤。如果没有足够的评审槽位，保留已知批次 diff，不提交，并返回 `blocked_target_churn`。
 - 发生冲突：检查冲突。只有意图无歧义且能完整测试时才解决；否则 abort rebase、保存证据，并返回 `blocked_rebase_conflict`。
 
@@ -51,7 +51,9 @@ git rebase --autostash refs/codebase-mr-autopilot/<mr-key>/target
 - 对每个已确认问题执行复现/定向测试。
 - 受影响模块测试。
 - 仓库要求的 lint、build、静态检查或生成文件检查。
-- 每次 rebase 后再次执行受影响验证。
+- 每次 rebase 后重新验证输入绑定。target/HEAD/worktree/命令属性任一变化时重新执行受影响验证；只有可证明的 no-op 才按 [execution-core.md](execution-core.md) 记录并复用结果。
+
+验证结果必须写入 manifest，至少包含命令、结果、target/HEAD/prospective patch/worktree digest、受影响包或模块集合、是否依赖网络/时间/外部服务、以及 `executed|reused`。复用时还要记录原结果路径/hash 和复用理由。缺少这些证据时不得复用。
 
 commit 前检查精确 staged 文件列表和 staged diff。不得使用可能纳入无关文件的宽泛 add。
 
@@ -153,6 +155,6 @@ bytedcli --json codebase mr queue entries <MR_URL>
 bytedcli --json codebase mr status <MR_URL> --page-size 100
 ```
 
-进入 queue 是 `queued`，不是 `merged`。直接 `merge_gate` 步骤持久化结果并返回主控。主控释放 Cycle Run lease、继续原生循环 tick，只有全新的直接 `intake_route` 步骤报告 `merged` 时才停止。
+进入 queue 是 `queued`，不是 `merged`。直接 `merge_gate` 步骤持久化结果并返回主 Agent，随后释放 Cycle Run lease。`once` 在报告“已入队但未合并”后结束本次执行；`loop` 继续原生唤醒，并且只有后续 probe/`intake_sync` 确认 MR 报告 `merged` 时才停止。
 
 如果 MR 关闭但未合并，持久化 `closed_unmerged`。如果 queue/check 状态变化或收到新的 Reviewer 反馈，主控在再次尝试入队前，把下一次 Cycle Run 路由到对应直接评论/CI 步骤。

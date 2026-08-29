@@ -28,12 +28,21 @@ agent-skills/
 
 | Skill | 用途 | 依赖 |
 |---|---|---|
-| `codebase-mr-autopilot` | 持续跟进一个已授权的 Codebase Go MR，处理评论、修复、CI、rebase 和合并 | `review-guard` |
+| `codebase-mr-autopilot` | 一次处理或持续跟进一个已授权的 Codebase Go MR，处理评论、修复、CI、rebase 和合并 | `review-guard` |
 | `review-guard` | 对 Go MR、分支、提交范围或工作区变更进行证据驱动的只读 Review | 无 |
 
 `codebase-mr-autopilot` 与 `review-guard` 是并列 Skill。Autopilot 的 R1/R2/R3 Review 会调用独立的 `review-guard`，因此使用 Autopilot 时必须同时安装两者。不要把 `review-guard` 复制进 Autopilot 目录，也不要在多个发现目录中保留不同实体的同名副本。
 
 两个 Skill 的说明、流程、评测描述和用户可见提示均使用简体中文。为保证跨运行时兼容，Skill 名称、命令、文件路径、JSON key、状态枚举和代码符号仍保留英文原值。
+
+### Autopilot 运行模式
+
+Autopilot 的业务流程只有一个有界 `Cycle Run`，外层支持两种模式：
+
+- `once`：执行一次完整处理后退出，不创建 scheduler。适合手动检查/处理当前评论、CI 或合并状态。
+- `loop`：立即执行一次，再由 Agent 运行时的原生固定间隔循环重复；适合持续监听直到真正合并。默认间隔 `1m`，也可以显式指定其他受支持 cadence。
+
+没有明确持续意图时默认 `once`。loop 空闲轮次只比较轻量状态 fingerprint，未变化时不创建业务子 Agent；R1 保持完整评审，R2 默认复审修复影响闭包并在高风险条件下回退全量评审。
 
 ## 安装
 

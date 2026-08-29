@@ -17,7 +17,7 @@ Botmux 必须保持以下精确拓扑：
 
 实时派发前确认已安装的 botmux 版本和当前 `--help`。botmux 标识符只能持久化在适配器配置中，不要放入可移植的核心范围。
 
-每个 MR 使用一个主控监听 topic/session。brief 只包含不可变范围、Skill 调用、中文输出要求、紧凑报告要求，以及启用运行时原生循环前先执行一次主控 tick 的指令。绝不能把 MR diff、评论、CI 日志或英文原始信封粘贴进去。
+每次调用使用一个主控 topic/session。brief 只包含不可变范围、`once|loop` 模式、loop interval（仅 loop）、Skill 调用、中文输出和紧凑报告要求。绝不能把 MR diff、评论、CI 日志或英文原始信封粘贴进去。
 
 ## 创建或桥接主控 session
 
@@ -40,9 +40,17 @@ botmux dispatch --title "MR <id> 自动跟进" \
   --brief-file <absolute-brief-file>
 ```
 
-## 注入 Claude 原生循环
+## once 与 Claude 原生 loop
 
-在所选 bot 上只允许必需的 slash command：
+`once` 只向主控 session 发送：
+
+```text
+/codebase-mr-autopilot once <MR_URL>
+```
+
+执行一个完整 Cycle Run 后返回。不得配置 `/loop` allowlist，不得注入 schedule，也不得因为缺少 scheduler 权限阻塞。
+
+`loop` 才执行以下流程。在所选 bot 上只允许必需的 slash command：
 
 ```json
 {
@@ -50,13 +58,13 @@ botmux dispatch --title "MR <id> 自动跟进" \
 }
 ```
 
-主控立即执行一次 tick 后，把运行时原生循环注入同一个空闲主控 session：
+主控立即执行一次 Cycle Run 后，把固定间隔运行时原生循环注入同一个空闲主控 session：
 
 ```text
-botmux slash "/loop 1m /codebase-mr-autopilot supervisor <MR_URL>"
+botmux slash "/loop <interval> /codebase-mr-autopilot loop-cycle <MR_URL>"
 ```
 
-Botmux 只负责传输 slash command；循环仍由 Claude 持有。把 Claude 返回的 8 字符 scheduled-task ID 记录在核心范围中。进入终止状态时，Claude 必须删除这个精确 task ID，并验证它不再出现在任务列表中。不得用 botmux workflow loop 替代。
+`<interval>` 来自用户或 owner policy，缺省 `1m`；必须显式提供，避免 Claude 动态 loop 改用 Monitor。Botmux 只负责传输 slash command，循环仍由 Claude 持有。把 Claude 返回的精确 scheduled-task ID 记录在核心范围中。进入终止状态时，Claude 必须删除该 task ID 并验证它不再出现在任务列表中。不得用 botmux workflow loop 替代。
 
 ## 启动一个全新的直接步骤 Worker
 
@@ -77,6 +85,6 @@ goal 文件必须包含 [supervisor-and-runtimes.md](supervisor-and-runtimes.md)
 
 - 实质进展或终止结果可以使用一次紧凑的 `botmux report`，内容必须为简体中文。
 - 主控渲染 `summary_zh` 和 `next_action_zh`；绝不能把原始 JSON 或英文 enum 值作为人类报告转发。
-- idle/waiting tick 不产生冗长 topic 消息。
-- 取消并验证精确绑定的运行时原生 task ID 前，先持久化终止状态并释放所持 lease。
+- loop 的 fingerprint 未变化、idle 或 waiting tick 不产生冗长 topic 消息；once 只发送一次最终结果。
+- 仅 loop 在终止时取消并验证精确运行时 task ID；once 的 scheduler 为 `not_applicable`。
 - 除非用户另行要求，否则绝不能 archive/delete botmux topic。

@@ -6,12 +6,13 @@
 
 ```text
 主控获取 Cycle Run lease
-主控 -> intake_rebase：同步/rebase source
+主控 -> intake_sync：刷新完整 MR 状态；有评论时同步/rebase source
 主控 -> review_r1：通过 review-guard 执行全新的只读完整 MR 评审
 主控 -> fix_batch：重新读取评论、合并/去重、分类、修复/驳回，
                     执行一次补充扫描、冻结 cutoff、验证，
-                    并构建规范 R2 证据
-主控 -> review_r2：通过 review-guard 全新只读评审预期最终版本
+                    并构建 R2 影响闭包和规范证据
+主控 -> review_r2：通过 review-guard 全新只读评审修复影响范围，
+                    命中回退条件时评审完整预期最终版本
 主控 -> final_fix：可选的第二次、也是最后一次修复，并构建 R3 证据
 主控 -> review_r3：可选的全新只读定向验证
 主控 -> commit_reply：提交前 rebase、验证、有变更时 commit/push，
@@ -56,7 +57,7 @@ open 不代表尚未修复。Reviewer 是否关闭线程与 Agent 是否完成�
   "review_skill_digest_before": "sha256",
   "review_skill_digest_after": "sha256",
   "scope": {
-    "scope_mode": "prospective_rebased_mr|prospective_final_mr|targeted_fix_delta",
+    "scope_mode": "prospective_rebased_mr|incremental_fix_impact|prospective_final_mr|targeted_fix_delta",
     "observed_remote_patchset": "host-patchset-id",
     "target_head_sha": "sha",
     "source_head_sha": "sha",
@@ -66,6 +67,8 @@ open 不代表尚未修复。Reviewer 是否关闭线程与 Agent 是否完成�
     "manifest_sha256": "sha256",
     "prospective_patch_sha256": "sha256",
     "last_fix_delta_sha256": "sha256-or-null",
+    "impact_closure_manifest_sha256": "sha256-or-null",
+    "scope_reason": "选择增量、全量或定向范围的中文理由",
     "required_fingerprints": [],
     "fingerprint_coverage": []
   },
@@ -101,20 +104,24 @@ open 不代表尚未修复。Reviewer 是否关闭线程与 Agent 是否完成�
 
 ## R1 Reviewer 契约
 
-R1 在初始 rebase 后、评论聚合完成前运行。其边界从明确 target SHA 到完成 rebase 的精确私有 worktree head。由于这个预期 head 可能尚未成为远端 MR patchset，不要让 `review-guard` 根据 MR URL 推断 ref；应使用明确 base/head 范围调用，单独记录观测到的远端 patchset，并且只有这些本地 SHA 和 diff hash 保持不变时才能应用结果。R1 是发现型评审，但不是全仓审计或可维护性评审。
+R1 在 `intake_sync` 初始 rebase 后、评论聚合完成前运行。其边界从明确 target SHA 到完成 rebase 的精确私有 worktree head。由于这个预期 head 可能尚未成为远端 MR patchset，不要让 `review-guard` 根据 MR URL 推断 ref；应使用明确 base/head 范围调用，单独记录观测到的远端 patchset，并且只有这些本地 SHA 和 diff hash 保持不变时才能应用结果。R1 是发现型评审，但不是全仓审计或可维护性评审。
 
-## R2 组合证据与 R3 覆盖
+## R2 影响闭包、全量回退与 R3 覆盖
 
-R2 评审预期最终 MR，它同时包含已提交 MR 历史和 active run 的 staged、unstaged、untracked 文件。不得只以 base/head 模式或只以 working-tree 模式调用 `review-guard`，因为两种单独视图都不完整。
+R2 默认只评审本轮修复 delta、被修改符号的直接调用/实现契约和相关测试，但它必须绑定完整预期最终 MR。完整预期 MR 同时包含已提交 MR 历史和 active run 的 staged、unstaged、untracked 文件；不得只以 base/head 或只以 working-tree 作为绑定证据。
 
-直接 `fix_batch` 步骤在外部评审目录构建规范 R2 证据，不得仅为了评审而 stage 仓库文件：
+直接 `fix_batch` 步骤在外部评审目录构建两类规范证据，不得仅为了评审而 stage 仓库文件：
 
 1. 验证每个 dirty/untracked 路径都属于 active run；无法解释的路径会阻塞批次。
 2. 解析精确 target SHA、当前 worktree `HEAD` 以及它们的 merge base。要求 target 关系符合 rebase 后预期。
 3. 从该 merge base 到当前 working tree 生成一个支持 rename 的 binary diff，包含 committed、staged 和 unstaged tracked 变更。
 4. 使用 `git ls-files --others --exclude-standard -z` 枚举 untracked 文件，并为每个本轮拥有的 untracked 路径追加 binary `/dev/null` diff，同时保持 NUL-safe 路径处理。
-5. 写入 manifest，包含轮次、target SHA、committed HEAD、merge base、porcelain-v2 status hash、排序后的纳入路径、untracked 路径/内容 hash、预期 patch SHA-256 和最终 worktree diff hash。
-6. 把 patch 和 manifest 都交给全新的直接 `review_r2` 步骤。它调用 `review-guard`，验证当前文件字节/status 仍与 manifest 匹配，并把这个明确的预期变更集作为规范证据。
+5. 生成 last-fix delta，并通过符号引用、直接调用者/实现、同一数据/并发/鉴权/持久化契约和相关测试，构建有限的影响闭包。记录每个纳入/排除路径的理由。
+6. 写入 manifest，包含轮次、target SHA、committed HEAD、merge base、porcelain-v2 status hash、完整 prospective patch hash、last-fix delta hash、排序后的完整路径、影响闭包路径/符号、untracked 内容 hash，以及 R2 mode/reason。
+7. 先评估全量回退条件：公共 API/接口、跨模块调用、并发/事务、鉴权/隔离、持久化/schema、IDL/生成物、配置/部署、依赖升级、文件移动/大量重命名；修复触碰 R1 范围外路径；R1 问题跨多个行为组；target 变化；无法证明影响闭包；任一证据缺失或 hash 不匹配。命中任一项时设置 `scope_mode=prospective_final_mr`；否则设置 `scope_mode=incremental_fix_impact`。
+8. 把完整 prospective patch、last-fix delta 和 manifest 都交给全新的直接 `review_r2` Worker。它验证当前文件字节/status，并按 manifest mode 评审。Reviewer 可以把增量模式升级为全量，不得把全量模式降级。
+
+增量 R2 不是只检查评论涉及的几行，也不是只确认原问题消失。它仍要寻找修复在影响闭包中引入的新 P0-P2 问题。只有 R1 已全量覆盖、target 未变、影响闭包完整且 digest 稳定时，才允许节省重复的全 MR 扫描。
 
 应用 R2 最终修复前，保留 R2 manifest/patch，并对完整 R2 预期文件集中的每个路径做快照，而不只是问题提到的文件。如果计划中的修复必须触碰额外路径，在首次写入前为该路径做快照，并加入允许的最终修复路径集。修复后重建完整预期证据，并针对完整前后快照集生成 binary last-fix delta，包含新增、修改、删除和 mode 变化。
 
@@ -180,7 +187,7 @@ R1 完成后，再次获取 open 评论。按文件、符号/区域和事实主�
 | 轮次 | 范围 | 是否可触发修复？ |
 |---|---|---|
 | R1 | 批次修复前，由全新 `review-guard` 执行完整 MR 发现型评审 | 是，第一次修复 |
-| R2 | 由全新 `review-guard` 评审完整预期最终 MR diff，包括本轮拥有的工作区批次和新文件 | 是，一次最终修复 |
+| R2 | 默认评审修复影响闭包；命中回退条件时评审完整预期最终 MR | 是，一次最终修复 |
 | R3 | 由全新 `review-guard` 定向验证 R2 问题和最后修复 delta | 不再触发自动修复/评审循环 |
 
 规则：

@@ -7,12 +7,16 @@
 当前 Autopilot 版本只接受以下 `review-guard` package digest：
 
 ```text
-a2576317bddfec7c1b2b504d050b6c654bcc48fee52d99f3b32e1bbd9349a79c
+22f6a61c2e0ec4d233942d95f7e6968bc4d51babc782e4206f458bfc65862b09
 ```
 
 按相对 POSIX 路径排序普通包文件并计算 SHA-256。对每个文件依次输入 `UTF-8 path`、NUL、原始字节、NUL。排除 `.git`、`.DS_Store`、`__pycache__` 和 `*.pyc`。
 
 发布新的 Review Guard 版本时，必须有意识地更新 Autopilot 兼容性并生成新的双 Skill bundle。不得接受任意同名包。
+
+### v5 legacy digest 迁移
+
+旧 v5 范围可能记录不可按上述算法复现的 legacy 值 `a2576317bddfec7c1b2b504d050b6c654bcc48fee52d99f3b32e1bbd9349a79c`。它不属于新兼容列表，也不能用于新的评审证明。只有在 [contracts-and-state.md](contracts-and-state.md) 定义的 v5 -> v6 安全迁移边界，且规范 package root 未变化、当前完整包按上述算法精确得到新兼容 digest 时，主 Agent 才能把该 legacy 值迁移为新值，并在迁移产物中记录 before/after/root/file manifest。其他任何场景都按依赖漂移阻塞。
 
 ## 无歧义发现
 
