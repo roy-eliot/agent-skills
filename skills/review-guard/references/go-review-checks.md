@@ -1,136 +1,135 @@
-# Go Review Checks
+# Go 评审检查
 
-Use this as a risk map, not a quota. Report only problems supported by the current change and its direct contracts.
+把本文作为风险地图，而不是问题配额。只报告能由当前变更及其直接契约支撑的问题。
 
-## 1. Determine Language and Project Semantics
+## 1. 确认语言与项目语义
 
-Read the relevant `go.mod`, `go.work`, `toolchain` directive, build tags, generated-code commands, and CI checks before applying version-sensitive advice.
+提出与版本有关的建议前，读取相关 `go.mod`、`go.work`、`toolchain` 指令、build tags、生成代码命令和 CI 检查。
 
-- Do not report historical range-variable capture behavior when the module's Go language version has per-iteration variables.
-- Do not recommend a new standard-library API that the module's supported Go version cannot use.
-- Respect repository patterns when multiple Go designs are equivalent.
-- A path named `generated`, `mocks`, `thrift_gen`, or `*_gen.go` is not proof of provenance. Determine whether the file is truly generated and whether its source definition was updated.
+- 如果模块的 Go 语言版本已经采用每轮独立的 range 变量，不得报告旧版本的 range 变量捕获问题。
+- 不得推荐模块所支持 Go 版本无法使用的新标准库 API。
+- 多种 Go 设计等价时，尊重仓库既有模式。
+- 路径名为 `generated`、`mocks`、`thrift_gen` 或 `*_gen.go` 并不能证明来源。应确认文件是否确为生成文件，以及它的源定义是否同步更新。
 
-## 2. Intent and Cross-File Contracts
+## 2. 意图与跨文件契约
 
-Start from behavior, not isolated hunks.
+从行为出发，不要孤立地看 diff hunk。
 
-- Follow changed entrypoints through direct callers and implementations.
-- When an interface, exported symbol, request/response type, error, event, config key, schema, or IDL changes, check producers and consumers that share the contract.
-- Check generated outputs only after finding the owning schema/generator contract.
-- Check config defaults across Go structs, examples, Helm/manifests, environment bindings, and docs when the config surface changes.
-- Check migrations, rollback, mixed-version rollout, and stored-data compatibility when persistence or wire formats change.
-- Distinguish deletion of unsupported behavior from accidental compatibility loss.
+- 从变更入口沿直接调用方和实现追踪。
+- interface、导出符号、请求/响应类型、错误、事件、配置键、schema 或 IDL 发生变化时，检查共享该契约的生产方和消费方。
+- 先找到负责的 schema/生成器契约，再检查生成产物。
+- 配置表面发生变化时，跨 Go 结构体、示例、Helm/manifests、环境变量绑定和文档检查默认值。
+- 持久化或 wire format 变化时，检查迁移、回滚、混合版本发布和存量数据兼容性。
+- 区分删除不受支持行为与意外丢失兼容性。
 
-## 3. Correctness and State
+## 3. 正确性与状态
 
-Trace a concrete execution path.
+追踪具体执行路径。
 
-- nil and zero-value behavior: pointers, maps, slices, funcs, interfaces containing typed nils, optional dependencies, and zero-value structs
-- slice/map ownership: subslice and `append` aliasing, returned internal slices/maps, mutation after channel send, pooled-object reset
-- conversions and arithmetic: narrowing, overflow, signed/unsigned boundaries, unit mismatches, division by zero, duration/timestamp precision
-- state machines: invalid transitions, partial updates, duplicate side effects, idempotency, retry behavior, cache/source consistency
-- control flow: shadowed variables, wrong early return, stale value use, incorrect error/status mapping, unordered map iteration where order is contractual
-- time: caller clock assumptions, timer/ticker lifecycle, deadline composition, timezone and duration units
+- nil 与零值行为：指针、map、slice、func、包含 typed nil 的 interface、可选依赖和零值 struct
+- slice/map 所有权：subslice 和 `append` 别名、返回内部 slice/map、发送到 channel 后继续修改、对象池重置
+- 转换与算术：窄化、溢出、有符号/无符号边界、单位不匹配、除零、duration/timestamp 精度
+- 状态机：非法迁移、部分更新、重复副作用、幂等性、重试行为、缓存/数据源一致性
+- 控制流：变量遮蔽、错误的提前返回、使用过期值、错误/状态映射错误、在顺序属于契约时依赖无序 map 遍历
+- 时间：调用方时钟假设、timer/ticker 生命周期、deadline 组合、时区和 duration 单位
 
-Do not report a nil or boundary risk without an actual input source or reachable state. If every current caller proves the precondition, the issue is at most a lower-severity defensive concern.
+没有实际输入来源或可达状态时，不得报告 nil 或边界风险。如果所有当前调用方都能证明前置条件，该问题最多只是较低严重级别的防御性关注点。
 
-## 4. Errors, Resources, and Context
+## 4. 错误、资源与 Context
 
-- Preserve error identity where callers use `errors.Is`/`errors.As`; use `%w` only when wrapping is part of the contract.
-- Do not both log and return the same error at multiple layers unless the repository has an explicit ownership rule.
-- Check ignored errors, especially transaction commit/rollback, buffered writes, close/flush, goroutines, callbacks, and deferred cleanup.
-- Ensure resource acquisition has cleanup on every path; a `defer` inside a long loop may retain resources until function return.
-- Derive new contexts from the caller's context. `context.Background()` inside request or job paths can sever cancellation, deadlines, tracing, auth, or tenant identity.
-- Ensure created cancel functions are called. Do not store request contexts in long-lived structs.
-- Timeout changes must preserve the tighter caller deadline and map timeout/cancellation errors correctly.
+- 调用方使用 `errors.Is`/`errors.As` 时，保留错误身份；仅当包装属于契约时使用 `%w`。
+- 除非仓库有明确的错误归属规则，否则不得在多层同时记录并返回同一错误。
+- 检查被忽略的错误，尤其是事务 commit/rollback、缓冲写入、close/flush、goroutine、回调和延迟清理。
+- 确保每条资源获取路径都有清理；长循环内的 `defer` 可能一直占用资源到函数返回。
+- 新 context 应从调用方 context 派生。请求或任务路径内的 `context.Background()` 可能切断取消、deadline、trace、鉴权或租户身份。
+- 确保创建的 cancel 函数被调用。不得把请求 context 存入长生命周期 struct。
+- timeout 变更必须保留调用方更严格的 deadline，并正确映射 timeout/cancellation 错误。
 
-## 5. Concurrency and Lifecycle
+## 5. 并发与生命周期
 
-Reason about ownership, ordering, shutdown, and failure, not just the presence of a mutex.
+要分析所有权、时序、关闭和失败，而不只是检查是否存在 mutex。
 
-- `WaitGroup.Add` happens before the goroutine can race with `Wait`; every started unit calls `Done` exactly once.
-- Goroutines have bounded lifetime, cancellation, error propagation, and panic policy appropriate to the repository.
-- Channel close ownership is singular; receivers do not close a producer-owned data channel.
-- Blocking sends and receives can exit on cancellation where shutdown requires it.
-- Locks protect the full invariant, not merely individual fields. Check lock ordering, callbacks while locked, copy-after-first-use of mutex-bearing values, and check-then-act windows.
-- Maps and shared slice backing arrays are not concurrently mutated without synchronization.
-- Atomics preserve the full multi-field invariant; race-free code can still be logically inconsistent.
-- Background workers, timers, tickers, subscriptions, streams, and leases are stopped and drained according to their contract.
+- `WaitGroup.Add` 必须发生在 goroutine 有机会与 `Wait` 竞争之前；每个已启动单元恰好调用一次 `Done`。
+- goroutine 必须有受限生命周期、取消、错误传播和符合仓库约定的 panic 策略。
+- channel 关闭权必须唯一；接收方不得关闭生产方拥有的数据 channel。
+- 在关闭流程需要时，阻塞的发送和接收必须能因取消而退出。
+- 锁应保护完整不变量，而非单个字段。检查锁顺序、持锁回调、首次使用后复制包含 mutex 的值，以及 check-then-act 窗口。
+- map 和共享 slice 底层数组不得在没有同步的情况下并发修改。
+- atomic 必须维护完整的多字段不变量；没有 data race 的代码仍可能逻辑不一致。
+- 后台 worker、timer、ticker、subscription、stream 和 lease 必须按契约停止并排空。
 
-Use `go test -race` when the affected package has meaningful concurrent execution. A passing race run does not prove lifecycle or ordering correctness.
+受影响包存在有意义的并发执行时使用 `go test -race`。race 测试通过并不能证明生命周期或时序正确。
 
-## 6. Security and Isolation
+## 6. 安全与隔离
 
-- Trace authentication and authorization from identity source through verification, decision, resource, and side effect.
-- Verify resource ownership, tenant/workspace/session boundaries, not just resource existence.
-- Check SQL/command/template injection, path traversal, SSRF and redirect policy, unsafe deserialization, archive extraction, upload type validation, and unbounded payloads.
-- Check secret/token handling in config, logs, errors, URLs, persistence, telemetry, and downstream requests.
-- Validate cryptographic algorithm, randomness, key lifecycle, comparison, and protocol use; do not invent custom crypto fixes.
-- Treat external input size, recursion, fan-out, and decompression ratios as resource-exhaustion surfaces.
-- For filesystem and network destinations, prove canonicalization and allow/deny policy at the point of use.
+- 从身份来源开始，沿验证、决策、资源和副作用追踪鉴权与授权。
+- 验证资源所有权以及 tenant/workspace/session 边界，不要只验证资源存在。
+- 检查 SQL/命令/模板注入、路径遍历、SSRF 与重定向策略、不安全反序列化、压缩包解压、上传类型验证和无界 payload。
+- 检查 secret/token 在配置、日志、错误、URL、持久化、遥测和下游请求中的处理。
+- 验证密码算法、随机性、密钥生命周期、比较方式和协议使用；不得自行发明密码学修复。
+- 把外部输入大小、递归、fan-out 和解压比例视为资源耗尽攻击面。
+- 对文件系统和网络目标，在实际使用点证明规范化及允许/拒绝策略。
 
-Security severity depends on a realistic attack path and impact. External-system assumptions lower confidence until verified.
+安全问题的严重级别取决于真实攻击路径和影响。外部系统假设在验证前会降低置信度。
 
-## 7. Persistence, Compatibility, and Operations
+## 7. 持久化、兼容性与运维
 
-- Transactions cover the complete invariant and use the intended isolation/locking behavior.
-- Retry and idempotency semantics prevent duplicate durable effects.
-- API/IDL/config/data changes preserve old callers or include an explicit migration and rollout plan.
-- Rolling upgrade works with mixed versions; rollback does not leave unreadable state or remove required defaults.
-- Startup/shutdown ordering releases leases, drains work, closes resources, and does not turn cooperative cancellation into data loss.
-- Logs, metrics, and traces identify material new failure paths without leaking sensitive data or creating unbounded cardinality.
-- Health/readiness semantics reflect actual dependency readiness and degradation policy.
+- 事务覆盖完整不变量，并使用预期的隔离/锁定行为。
+- 重试和幂等语义能防止重复的持久化副作用。
+- API/IDL/config/data 变更应兼容旧调用方，或包含明确的迁移和发布计划。
+- 滚动升级应支持混合版本；回滚不能留下不可读状态或移除必要默认值。
+- 启动/关闭时序应释放 lease、排空工作、关闭资源，并且不能把协作式取消变成数据丢失。
+- 日志、指标和 trace 应能识别重要的新失败路径，同时不得泄露敏感数据或产生无界 cardinality。
+- health/readiness 语义应反映真实依赖就绪状态和降级策略。
 
-## 8. Performance
+## 8. 性能
 
-Report performance only with a credible hot path, scale condition, or measured regression.
+只有存在可信热点路径、规模条件或实测退化时，才报告性能问题。
 
-- unbounded goroutine/task creation, queues, reads, or response aggregation
-- N+1 storage/network calls and repeated serialization
-- large avoidable allocation/copy/retention, including small subslices retaining large buffers
-- lock contention or blocking I/O inside critical sections
-- missing backpressure, pagination limits, timeouts, or batch bounds
-- algorithmic growth that is material for expected input size
+- 无界 goroutine/task 创建、队列、读取或响应聚合
+- N+1 存储/网络调用和重复序列化
+- 大量可避免的分配/复制/内存保留，包括小 subslice 持有大 buffer
+- 临界区中的锁竞争或阻塞 I/O
+- 缺少背压、分页限制、timeout 或 batch 边界
+- 对预期输入规模有实质影响的算法增长
 
-Do not report micro-optimizations, arbitrary channel buffer sizes, or alternative data structures without evidence.
+没有证据时，不得报告微优化、武断的 channel buffer 大小或替代数据结构。
 
-## 9. Tests and Validation Evidence
+## 9. 测试与验证证据
 
-Judge tests as executable proof of supported behavior, not a coverage-number target.
+把测试视为受支持行为的可执行证明，而不是覆盖率数字目标。
 
-A missing-test finding must name:
+缺少测试的问题必须指出：
 
-1. the changed supported contract
-2. the layer that owns the proof
-3. a material wrong implementation the test would catch
-4. the smallest architecture-preserving test action
+1. 发生变化且受支持的契约
+2. 应负责提供证明的层
+3. 测试能够捕获的一种实质错误实现
+4. 保持架构不变的最小测试动作
 
-For tests already in the diff, check observable behavior, assertion ownership, determinism, isolation, cleanup, race/flakiness risk, over-mocking, and whether failure is attributed to the correct subtest/helper.
+对于 diff 中已有的测试，检查可观察行为、断言归属、确定性、隔离、清理、race/flaky 风险、过度 mock，以及失败是否归因到正确的 subtest/helper。
 
-Do not require table-driven tests, `t.Parallel`, a particular mocking library, or file naming solely as personal preference. Apply such rules only when the repository contract requires them or the current form causes a concrete reliability problem.
+不得仅凭个人偏好要求 table-driven 测试、`t.Parallel`、特定 mocking 库或文件命名。只有仓库契约有要求，或当前形式造成具体可靠性问题时，才能应用这些规则。
 
-Recommended validation selection:
+推荐的验证选择：
 
-- formatting: read-only `gofmt -d` or repository formatter check
-- compile/unit: focused `go test` on affected packages
-- concurrency: focused `go test -race -count=1`
-- static analysis: repository lint/vet target, or focused `go vet`
-- integration/schema/deployment: only when touched and safe; honor build tags and required fixtures
-- full suite: when proportional and repository-native, not as a substitute for focused failure reproduction
+- 格式：只读 `gofmt -d` 或仓库格式检查
+- 编译/单元测试：对受影响包执行聚焦的 `go test`
+- 并发：聚焦的 `go test -race -count=1`
+- 静态分析：仓库 lint/vet 目标，或聚焦的 `go vet`
+- 集成/schema/部署：仅在确有触及时且安全执行；遵守 build tags 和所需 fixture
+- 全量测试：仅在风险比例合理且属于仓库原生流程时执行，不能代替聚焦的失败复现
 
-Record exact commands, outcomes, skipped checks, and environmental failures separately from code findings.
+记录准确命令、结果、跳过的检查和环境失败，并与代码问题分开。
 
-## 10. False-Positive Filter
+## 10. 误报过滤器
 
-Drop a candidate when any is true:
+候选问题满足以下任一条件时应删除：
 
-- it exists only in deleted old code
-- the current patchset already fixes it
-- the location is outside the requested scope and the change does not activate it
-- it is merely a valid alternative design, naming preference, formatting issue handled by tooling, or educational note
-- it assumes nil, concurrency, scale, external behavior, or caller misuse without evidence
-- it duplicates the same root cause
-- its line number or source revision is stale
-- the suggested fix would broaden scope without necessity
-
+- 只存在于已删除的旧代码中
+- 当前 patchset 已经修复
+- 位置超出用户要求的范围，且本次变更没有激活它
+- 只是另一种同样有效的设计、命名偏好、由工具处理的格式问题或教学性说明
+- 在没有证据时假设 nil、并发、规模、外部行为或调用方误用
+- 与同一根因重复
+- 行号或源码版本已经过期
+- 建议修复会无必要地扩大范围

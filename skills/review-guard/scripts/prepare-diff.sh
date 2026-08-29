@@ -3,14 +3,14 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage:
+用法：
   prepare-diff.sh --repo-root PATH --output FILE --base REF --head REF
   prepare-diff.sh --repo-root PATH --output FILE --range RANGE
   prepare-diff.sh --repo-root PATH --output FILE --working-tree
 
-Creates a read-only canonical Git diff and FILE.meta. Working-tree mode includes
-staged, unstaged, and untracked files. The script never fetches, checks out,
-stages, stashes, cleans, or edits repository files.
+生成只读的规范 Git diff 和 FILE.meta。工作区模式包含 staged、unstaged
+和 untracked 文件。脚本绝不会执行 fetch、checkout、stage、stash、clean，
+也不会编辑仓库文件。
 EOF
 }
 
@@ -52,7 +52,7 @@ while (($#)); do
       exit 0
       ;;
     *)
-      printf 'unknown argument: %s\n' "$1" >&2
+      printf '未知参数：%s\n' "$1" >&2
       usage >&2
       exit 2
       ;;
@@ -60,7 +60,7 @@ while (($#)); do
 done
 
 if [[ -z "$repo_root" || -z "$output" ]]; then
-  printf '%s\n' '--repo-root and --output are required' >&2
+  printf '%s\n' '必须同时提供 --repo-root 和 --output' >&2
   exit 2
 fi
 
@@ -70,7 +70,7 @@ git -C "$repo_root" rev-parse --is-inside-work-tree >/dev/null
 mode_count=0
 if [[ -n "$base_ref" || -n "$head_ref" ]]; then
   if [[ -z "$base_ref" || -z "$head_ref" ]]; then
-    printf '%s\n' '--base and --head must be provided together' >&2
+    printf '%s\n' '必须同时提供 --base 和 --head' >&2
     exit 2
   fi
   mode_count=$((mode_count + 1))
@@ -82,7 +82,7 @@ if ((working_tree)); then
   mode_count=$((mode_count + 1))
 fi
 if ((mode_count != 1)); then
-  printf '%s\n' 'choose exactly one mode: --base/--head, --range, or --working-tree' >&2
+  printf '%s\n' '必须且只能选择一种模式：--base/--head、--range 或 --working-tree' >&2
   exit 2
 fi
 
@@ -91,7 +91,7 @@ output_dir="$(cd "$(dirname "$output")" && pwd -P)"
 output="${output_dir}/$(basename "$output")"
 case "$output" in
   "$repo_root"|"$repo_root"/*)
-    printf '%s\n' '--output must be outside the reviewed repository' >&2
+    printf '%s\n' '--output 必须位于被评审仓库之外' >&2
     exit 2
     ;;
 esac
@@ -118,13 +118,13 @@ if ((working_tree)); then
     status=$?
     set -e
     if ((status > 1)); then
-      printf 'failed to diff untracked file: %s\n' "$path" >&2
+      printf '无法生成 untracked 文件的 diff：%s\n' "$path" >&2
       exit "$status"
     fi
   done < <(git -C "$repo_root" ls-files --others --exclude-standard -z)
 elif [[ -n "$diff_range" ]]; then
   if [[ "$diff_range" == -* ]]; then
-    printf '%s\n' '--range must not begin with a dash' >&2
+    printf '%s\n' '--range 不能以连字符开头' >&2
     exit 2
   fi
   mode="range"

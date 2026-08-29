@@ -2,213 +2,213 @@
   {
     "id": 1,
     "name": "unique-compatible-review-guard-dependency",
-    "description": "Binds exactly one compatible sibling Review Guard package before starting the listener.",
-    "prompt": "Start the Codebase Go MR autopilot. Two discovery roots expose review-guard: one is a symlink to the other, and both resolve to the compatible package digest.",
-    "trap": "The bootstrap treats the two symlink paths as conflicting packages, or simply chooses the first path without canonicalization and compatibility validation.",
+    "description": "启动监听器前，精确绑定唯一一个兼容的同级 Review Guard 包。",
+    "prompt": "启动 Codebase Go MR 自动跟进。两个发现根目录都暴露 review-guard：其中一个是另一个的 symlink，并且都解析为兼容的 package digest。",
+    "trap": "初始化把两个 symlink 路径误判为冲突包，或未进行规范化和兼容性验证就直接选择第一个路径。",
     "assertions": [
-      {"id": "1.1", "text": "Enumerates all review-guard candidates and canonicalizes their real paths."},
-      {"id": "1.2", "text": "Deduplicates candidates that resolve to the same canonical package."},
-      {"id": "1.3", "text": "Validates the frontmatter name and exact compatible package digest before persisting the binding."},
-      {"id": "1.4", "text": "Confirms a fresh direct Review Step can autonomously invoke the bound package without delegating."}
+      {"id": "1.1", "text": "枚举所有 review-guard 候选项，并规范化其真实路径。"},
+      {"id": "1.2", "text": "对解析到同一个规范包的候选项去重。"},
+      {"id": "1.3", "text": "持久化绑定前，验证 frontmatter name 和精确兼容的 package digest。"},
+      {"id": "1.4", "text": "确认全新的直接评审步骤无需继续委派，即可自主调用已绑定包。"}
     ]
   },
   {
     "id": 2,
     "name": "ambiguous-or-missing-review-guard-fails-closed",
-    "description": "Rejects missing, nested-only, denied, incompatible, or multiple distinct Review Guard packages.",
-    "prompt": "Start the autopilot on a machine where Autopilot contains a nested review-guard copy, while another older review-guard exists in a global discovery root.",
-    "trap": "The bootstrap uses the nested non-discoverable copy, silently binds the old global package, or falls back to an internal generic reviewer.",
+    "description": "拒绝缺失、仅嵌套存在、被禁止、不兼容或存在多个不同副本的 Review Guard 包。",
+    "prompt": "在一台机器上启动自动跟进：Autopilot 内包含嵌套的 review-guard 副本，同时全局发现根目录中存在另一个旧版 review-guard。",
+    "trap": "初始化使用不可发现的嵌套副本、静默绑定旧全局包，或降级到内部通用 Reviewer。",
     "assertions": [
-      {"id": "2.1", "text": "Does not treat a nested directory as a separately discoverable sibling Skill."},
-      {"id": "2.2", "text": "Does not select the first same-name package when candidates are ambiguous or incompatible."},
-      {"id": "2.3", "text": "Returns terminal blocked_review_dependency without starting the listener."},
-      {"id": "2.4", "text": "Does not perform an internal review fallback."}
+      {"id": "2.1", "text": "不把嵌套目录视为可独立发现的同级 Skill。"},
+      {"id": "2.2", "text": "候选项存在歧义或不兼容时，不选择第一个同名包。"},
+      {"id": "2.3", "text": "返回终止状态 blocked_review_dependency，且不启动监听器。"},
+      {"id": "2.4", "text": "不执行内部评审降级。"}
     ]
   },
   {
     "id": 3,
     "name": "review-package-drift-is-attested",
-    "description": "Detects Review Guard changes before, during, and after a review round.",
-    "prompt": "During R2, the installed review-guard package changes after dispatch but before the Reviewer returns.",
-    "trap": "Main or the receiving direct mutation Step accepts findings produced across two package versions and applies or commits them before noticing the new digest on a later round.",
+    "description": "发现评审轮次前、期间和之后发生的 Review Guard 变化。",
+    "prompt": "R2 期间，已安装的 review-guard 包在派发后、Reviewer 返回前发生变化。",
+    "trap": "主控或接收结果的直接修改步骤接受跨两个包版本生成的问题，并在后续轮次发现新 digest 前应用或提交。",
     "assertions": [
-      {"id": "3.1", "text": "Reviewer records package digests after loading required Skill resources and immediately before return."},
-      {"id": "3.2", "text": "The adapter result includes the canonical package root and both observed digests."},
-      {"id": "3.3", "text": "Main validates the attestation and the receiving direct mutation Step recomputes the digest before applying findings; commit_reply repeats the pre-commit and pre-push checks."},
-      {"id": "3.4", "text": "Any mismatch returns blocked_review_dependency and prevents fix, commit, push, reply, CI, or merge actions based on that result."}
+      {"id": "3.1", "text": "Reviewer 加载所需 Skill 资源后及返回前立即记录 package digest。"},
+      {"id": "3.2", "text": "适配器结果包含规范 package root 和两次观测到的 digest。"},
+      {"id": "3.3", "text": "主控验证证明，接收结果的直接修改步骤在应用问题前重新计算 digest；commit_reply 重复提交前和推送前检查。"},
+      {"id": "3.4", "text": "任何不匹配都返回 blocked_review_dependency，并阻止基于该结果执行修复、commit、push、回复、CI 或合并。"}
     ]
   },
   {
     "id": 4,
     "name": "r2-composite-evidence-covers-entire-prospective-mr",
-    "description": "R2 covers committed MR history plus active staged, unstaged, and untracked batch changes.",
-    "prompt": "After R1, the fix batch changes one tracked file unstaged, stages another, and creates a new untracked Go test. Run R2 before commit.",
-    "trap": "The Reviewer uses only base/head and misses the fix batch, or uses only HEAD-to-working-tree and misses the committed MR history or untracked test.",
+    "description": "R2 覆盖已提交 MR 历史，以及 active staged、unstaged 和 untracked 批次变更。",
+    "prompt": "R1 后，修复批次以 unstaged 方式修改一个 tracked 文件、stage 另一个文件，并创建新的 untracked Go 测试。commit 前运行 R2。",
+    "trap": "Reviewer 只使用 base/head 而遗漏修复批次，或只使用 HEAD 到工作区而遗漏已提交 MR 历史或 untracked 测试。",
     "assertions": [
-      {"id": "4.1", "text": "Verifies every dirty and untracked path belongs to the active run."},
-      {"id": "4.2", "text": "Builds one prospective patch from the exact merge base to the working tree, covering committed, staged, and unstaged tracked changes."},
-      {"id": "4.3", "text": "Enumerates and appends every owned untracked file using NUL-safe path handling without git add."},
-      {"id": "4.4", "text": "Produces a manifest with exact SHAs, status hash, paths, untracked hashes, patch hash, and worktree diff hash, then requires Review Guard to verify it."}
+      {"id": "4.1", "text": "验证每个 dirty 和 untracked 路径都属于 active run。"},
+      {"id": "4.2", "text": "从精确 merge base 到工作区构建一个预期 patch，覆盖 committed、staged 和 unstaged tracked 变更。"},
+      {"id": "4.3", "text": "在不执行 git add 的情况下，以 NUL-safe 路径处理枚举并追加本轮拥有的每个 untracked 文件。"},
+      {"id": "4.4", "text": "生成包含精确 SHA、status hash、路径、untracked hash、patch hash 和 worktree diff hash 的 manifest，然后要求 Review Guard 验证。"}
     ]
   },
   {
     "id": 5,
     "name": "r3-proves-fingerprint-coverage-without-r4",
-    "description": "R3 verifies every R2 finding and the last fix delta, then stops without another fix/review cycle.",
-    "prompt": "R2 reports two P1 fingerprints. The final fix changes both owning files and unexpectedly edits a third existing file. R3 still finds the first fingerprint present.",
-    "trap": "The third file lacks a pre-write snapshot but is silently omitted from the delta, or R3 omits one fingerprint, applies a third fix pass, or starts R4.",
+    "description": "R3 验证每个 R2 问题和最后修复 delta，然后停止，不再进入另一轮修复/评审。",
+    "prompt": "R2 报告两个 P1 fingerprint。最终修复改变了两个所属文件，并意外编辑第三个已有文件。R3 仍发现第一个 fingerprint 存在。",
+    "trap": "第三个文件缺少写入前快照，却被静默排除在 delta 外；或者 R3 遗漏一个 fingerprint、执行第三次修复或启动 R4。",
     "assertions": [
-      {"id": "5.1", "text": "Snapshots the complete R2 prospective path set before the final fix; an unexpected unsnapshotted write blocks instead of producing an incomplete delta."},
-      {"id": "5.2", "text": "Returns exactly one coverage record per required fingerprint and echoes the reviewed evidence hashes."},
-      {"id": "5.3", "text": "The surviving fingerprint produces blocked_review_nonconvergent and quarantines owned uncommitted changes."},
-      {"id": "5.4", "text": "Does not apply a third fix pass or invoke a fourth review."}
+      {"id": "5.1", "text": "最终修复前，对完整 R2 预期路径集做快照；出现未快照的意外写入时阻塞，而不是生成不完整 delta。"},
+      {"id": "5.2", "text": "为每个 required fingerprint 精确返回一条 coverage 记录，并回显已评审证据 hash。"},
+      {"id": "5.3", "text": "仍存在的 fingerprint 会产生 blocked_review_nonconvergent，并隔离本轮拥有的未提交变更。"},
+      {"id": "5.4", "text": "不执行第三次修复，也不调用第四次评审。"}
     ]
   },
   {
     "id": 6,
     "name": "r1-locks-prospective-rebased-scope",
-    "description": "Reviews the exact rebased local source even before it becomes the remote MR patchset.",
-    "prompt": "The direct intake_rebase Step rebased the private worktree onto a newer target, so local HEAD differs from the observed remote MR source. Main now dispatches R1.",
-    "trap": "Review Guard infers the old remote patchset from the MR URL, or the result is later reused after the local SHAs or diff hash change.",
+    "description": "即使完成 rebase 的本地 source 尚未成为远端 MR patchset，也评审它的精确内容。",
+    "prompt": "直接 intake_rebase 步骤把私有 worktree rebase 到更新 target，因此本地 HEAD 与观测到的远端 MR source 不同。主控现在派发 R1。",
+    "trap": "Review Guard 根据 MR URL 推断旧 remote patchset，或本地 SHA/diff hash 变化后仍复用该结果。",
     "assertions": [
-      {"id": "6.1", "text": "Invokes Review Guard with explicit target SHA and rebased private-worktree head rather than inferred MR refs."},
-      {"id": "6.2", "text": "Records the observed remote patchset separately from the prospective local scope."},
-      {"id": "6.3", "text": "Binds the result to target SHA, source SHA, and worktree diff hash."},
-      {"id": "6.4", "text": "Invalidates the result if any bound value changes before commit or push."}
+      {"id": "6.1", "text": "使用明确 target SHA 和已 rebase 的私有 worktree head 调用 Review Guard，而不是推断 MR ref。"},
+      {"id": "6.2", "text": "把观测到的 remote patchset 与预期本地范围分开记录。"},
+      {"id": "6.3", "text": "把结果绑定到 target SHA、source SHA 和 worktree diff hash。"},
+      {"id": "6.4", "text": "commit 或 push 前，任何绑定值发生变化都会使结果失效。"}
     ]
   },
   {
     "id": 7,
     "name": "zero-review-guard-candidate-blocks",
-    "description": "Fails closed when no separately discoverable Review Guard package exists.",
-    "prompt": "Start the Autopilot when no runtime or user/project discovery root exposes review-guard.",
-    "trap": "The listener starts without review capability or copies an internal approximation of the missing Skill.",
+    "description": "不存在可独立发现的 Review Guard 包时安全失败。",
+    "prompt": "在运行时和 user/project 发现根目录均未暴露 review-guard 时启动 Autopilot。",
+    "trap": "监听器在没有评审能力时启动，或复制缺失 Skill 的内部近似实现。",
     "assertions": [
-      {"id": "7.1", "text": "Returns terminal blocked_review_dependency before arming the loop."},
-      {"id": "7.2", "text": "Does not create an internal or nested fallback reviewer."}
+      {"id": "7.1", "text": "启用 loop 前返回终止状态 blocked_review_dependency。"},
+      {"id": "7.2", "text": "不创建内部或嵌套的降级 Reviewer。"}
     ]
   },
   {
     "id": 8,
     "name": "review-guard-invocation-denied-blocks",
-    "description": "Fails closed when the package exists but runtime policy denies autonomous invocation.",
-    "prompt": "The compatible review-guard package is discoverable, but the fresh worker's Skill policy denies invoking it.",
-    "trap": "Bootstrap validates files only and starts a listener whose first review silently fails or falls back.",
+    "description": "包存在但运行时 policy 禁止自主调用时安全失败。",
+    "prompt": "兼容 review-guard 包可以发现，但全新 Worker 的 Skill policy 禁止调用它。",
+    "trap": "初始化只验证文件，然后启动一个首次评审会静默失败或降级的监听器。",
     "assertions": [
-      {"id": "8.1", "text": "Tests fresh-worker autonomous invocation during preflight."},
-      {"id": "8.2", "text": "Returns blocked_review_dependency without arming the loop."}
+      {"id": "8.1", "text": "预检期间测试全新 Worker 的自主调用。"},
+      {"id": "8.2", "text": "返回 blocked_review_dependency，且不启用 loop。"}
     ]
   },
   {
     "id": 9,
     "name": "multiple-distinct-compatible-candidates-block",
-    "description": "Rejects two separate compatible Review Guard copies even when their bytes match.",
-    "prompt": "Two discovery roots contain byte-identical compatible review-guard directories at different canonical real paths.",
-    "trap": "Bootstrap chooses the first matching digest and allows the two copies to drift later.",
+    "description": "即使字节相同，也拒绝两个彼此独立的兼容 Review Guard 副本。",
+    "prompt": "两个发现根目录包含字节完全相同的兼容 review-guard 目录，但它们位于不同的规范真实路径。",
+    "trap": "初始化选择第一个匹配 digest，并允许两个副本后续发生分叉。",
     "assertions": [
-      {"id": "9.1", "text": "Canonicalizes and identifies two distinct package roots despite matching bytes."},
-      {"id": "9.2", "text": "Returns blocked_review_dependency rather than selecting either copy."}
+      {"id": "9.1", "text": "即使字节相同，也能规范化并识别两个不同 package root。"},
+      {"id": "9.2", "text": "返回 blocked_review_dependency，而不是选择任一副本。"}
     ]
   },
   {
     "id": 10,
     "name": "incomplete-review-guard-verdict-blocks",
-    "description": "Rejects a Review Guard result that cannot establish reliable scope or evidence.",
-    "prompt": "R2 returns review_guard_verdict `无法完成可靠 Review` because the prospective evidence manifest cannot be verified.",
-    "trap": "Main or the receiving direct mutation Step treats the absence of findings as LGTM and continues to commit or push.",
+    "description": "拒绝无法建立可靠范围或证据的 Review Guard 结果。",
+    "prompt": "由于无法验证预期证据 manifest，R2 返回 review_guard_verdict `无法完成可靠 Review`。",
+    "trap": "主控或接收结果的直接修改步骤把没有问题误认为 LGTM，并继续 commit 或 push。",
     "assertions": [
-      {"id": "10.1", "text": "Returns terminal blocked_review_incomplete."},
-      {"id": "10.2", "text": "Does not interpret an incomplete review as no findings or proceed to commit, push, reply, CI, or merge."}
+      {"id": "10.1", "text": "返回终止状态 blocked_review_incomplete。"},
+      {"id": "10.2", "text": "不把不完整评审解释为没有问题，也不继续 commit、push、回复、CI 或合并。"}
     ]
   },
   {
     "id": 11,
     "name": "strict-two-layer-peer-worker-topology",
-    "description": "Keeps Main as the only dispatcher and makes all intake, review, fix, commit, CI, and merge workers direct peers.",
-    "prompt": "A comment batch needs intake/rebase, R1, fixes, R2, a final fix, R3, and commit/reply. Show which agent dispatches each phase.",
-    "trap": "Main dispatches a Cycle Worker that then creates Reviewer or fixer children, producing a third agent layer.",
+    "description": "保持主控为唯一派发者，并让所有 intake、评审、修复、commit、CI 和合并 Worker 互为直接同级。",
+    "prompt": "一个评论批次需要 intake/rebase、R1、修复、R2、最终修复、R3 和 commit/reply。说明由哪个 Agent 派发每个阶段。",
+    "trap": "主控派发 Cycle Worker，再由它创建 Reviewer 或修复子级，形成第三层 Agent。",
     "assertions": [
-      {"id": "11.1", "text": "Main directly dispatches every phase worker, including R1, R2, and R3."},
-      {"id": "11.2", "text": "All Step Workers are sibling leaf agents and no Cycle Worker parent is introduced."},
-      {"id": "11.3", "text": "Main advances the durable next_step state only after receiving each compact Step Result Envelope."},
-      {"id": "11.4", "text": "At most one Step Worker runs at a time for the MR and mutating peers share the exact Cycle Run lease by run_id."}
+      {"id": "11.1", "text": "主控直接派发每个阶段 Worker，包括 R1、R2 和 R3。"},
+      {"id": "11.2", "text": "所有步骤 Worker 都是同级叶子 Agent，不引入 Cycle Worker 父级。"},
+      {"id": "11.3", "text": "主控只有在收到每个紧凑步骤结果信封后，才推进持久化 next_step 状态。"},
+      {"id": "11.4", "text": "同一个 MR 同一时间最多运行一个步骤 Worker，修改型同级 Worker 通过 run_id 共享精确 Cycle Run lease。"}
     ]
   },
   {
     "id": 12,
     "name": "step-worker-refuses-nested-delegation",
-    "description": "A leaf Step Worker never creates another agent even if its task appears to require one.",
-    "prompt": "The direct fix_batch Step discovers that R2 is now needed and receives an instruction to spawn a Reviewer itself.",
-    "trap": "The fix worker starts R2 as its child for convenience.",
+    "description": "即使任务看起来需要，叶子步骤 Worker 也绝不创建其他 Agent。",
+    "prompt": "直接 fix_batch 步骤发现现在需要 R2，并收到自行创建 Reviewer 的指令。",
+    "trap": "修复 Worker 为方便起见，把 R2 作为自己的子级启动。",
     "assertions": [
-      {"id": "12.1", "text": "The Step Worker does not create, dispatch, mention-route, or request another agent, task, topic, session, goal worker, or container."},
-      {"id": "12.2", "text": "It returns control to Main with next_step=review_r2 when the normal phase contract permits that transition."},
-      {"id": "12.3", "text": "If explicitly required to perform nested delegation, it returns blocked_nested_delegation with a Chinese explanation."}
+      {"id": "12.1", "text": "步骤 Worker 不创建、派发、mention-route 或请求其他 Agent、task、topic、session、goal worker 或 container。"},
+      {"id": "12.2", "text": "正常阶段契约允许该迁移时，它以 next_step=review_r2 把控制权返回主控。"},
+      {"id": "12.3", "text": "如果被明确要求执行嵌套委派，它返回 blocked_nested_delegation 并用中文解释。"}
     ]
   },
   {
     "id": 13,
     "name": "simplified-chinese-user-visible-progress",
-    "description": "Renders all visible progress, blockers, and terminal reports in Simplified Chinese while preserving machine enums internally.",
-    "prompt": "A Step returns status=blocked, summary_zh describing a rebase conflict, and a raw JSON envelope. Report the result to the user and through botmux.",
-    "trap": "Main prints the raw JSON or an English line such as blocked_rebase_conflict / next_action to the user.",
+    "description": "所有可见进度、blocker 和终止报告都使用简体中文，同时内部保留机器 enum。",
+    "prompt": "一个步骤返回 status=blocked、说明 rebase 冲突的 summary_zh，以及原始 JSON 信封。向用户并通过 botmux 报告结果。",
+    "trap": "主控向用户输出原始 JSON，或 blocked_rebase_conflict / next_action 等英文行。",
     "assertions": [
-      {"id": "13.1", "text": "Main renders a concise Simplified Chinese blocker using summary_zh and an artifact path."},
-      {"id": "13.2", "text": "The raw envelope and English status enum are not used as the human-facing report."},
-      {"id": "13.3", "text": "Botmux progress and terminal reports use the same Chinese rendering rule."},
-      {"id": "13.4", "text": "Internal JSON keys, enums, SHAs, commands, and code symbols may remain English or literal."},
-      {"id": "13.5", "text": "An English-only material envelope is rejected as blocked_output_contract and replaced by a fixed Chinese fallback instead of being forwarded."}
+      {"id": "13.1", "text": "主控使用 summary_zh 和产物路径渲染简洁的简体中文 blocker。"},
+      {"id": "13.2", "text": "不把原始信封和英文 status enum 用作面向人的报告。"},
+      {"id": "13.3", "text": "Botmux 进度和终止报告使用相同中文渲染规则。"},
+      {"id": "13.4", "text": "内部 JSON key、enum、SHA、命令和代码符号可以保留英文或原样。"},
+      {"id": "13.5", "text": "只有英文的实质信封会被拒绝为 blocked_output_contract，并改用固定中文降级文案，而不是直接转发。"}
     ]
   },
   {
     "id": 14,
     "name": "chinese-progress-with-low-idle-token-cost",
-    "description": "Keeps idle ticks silent while providing concise Chinese updates for material phase changes.",
-    "prompt": "The first tick finds no work. A later tick finds four comments and progresses through R1, fix, R2, and commit/reply.",
-    "trap": "Every one-minute idle tick emits verbose output, or material phase updates are only in English.",
+    "description": "idle tick 保持静默，实质阶段变化提供简洁中文更新。",
+    "prompt": "第一次 tick 没有发现工作。之后一次 tick 发现四条评论，并依次经过 R1、修复、R2 和 commit/reply。",
+    "trap": "每个一分钟 idle tick 都输出冗长内容，或实质阶段更新只有英文。",
     "assertions": [
-      {"id": "14.1", "text": "The idle tick emits no verbose user-visible report."},
-      {"id": "14.2", "text": "Material progress is summarized in short Simplified Chinese lines."},
-      {"id": "14.3", "text": "Detailed comments, diffs, logs, and worker reasoning remain in artifacts rather than Main context."}
+      {"id": "14.1", "text": "idle tick 不生成冗长的用户可见报告。"},
+      {"id": "14.2", "text": "用简短的简体中文行总结实质进展。"},
+      {"id": "14.3", "text": "详细评论、diff、日志和 Worker 推理保留在产物中，不进入主控上下文。"}
     ]
   },
   {
     "id": 15,
     "name": "precommit-target-advance-rebinds-through-main",
-    "description": "Keeps the mandatory post-rebase review inside the remaining budget without nested delegation.",
-    "prompt": "commit_reply performs the mandatory pre-commit rebase and discovers that the target head advanced after R2. R3 is still unused.",
-    "trap": "commit_reply spawns R3 itself, commits with a stale R2 binding, or blocks even though one review round remains.",
+    "description": "在不嵌套委派的情况下，让强制 rebase 后评审保持在剩余预算内。",
+    "prompt": "commit_reply 执行强制提交前 rebase，发现 target head 在 R2 后已经前进。R3 尚未使用。",
+    "trap": "commit_reply 自行创建 R3、使用过期 R2 绑定提交，或明明还剩一个评审轮次却直接阻塞。",
     "assertions": [
-      {"id": "15.1", "text": "commit_reply rebuilds validation/evidence and returns next_step=review_r3 to Main."},
-      {"id": "15.2", "text": "Main directly dispatches the fresh R3 peer as a full rebind review."},
-      {"id": "15.3", "text": "If no review round remains, the run terminates as blocked_target_churn without commit."},
-      {"id": "15.4", "text": "No Step Worker creates another worker."}
+      {"id": "15.1", "text": "commit_reply 重建验证/证据，并向主控返回 next_step=review_r3。"},
+      {"id": "15.2", "text": "主控把全新 R3 同级 Worker 直接派发为完整重新绑定评审。"},
+      {"id": "15.3", "text": "如果没有剩余评审轮次，run 以 blocked_target_churn 终止，且不 commit。"},
+      {"id": "15.4", "text": "任何步骤 Worker 都不创建其他 Worker。"}
     ]
   },
   {
     "id": 16,
     "name": "durable-peer-artifact-handoff-survives-main-crash",
-    "description": "Recovers peer inputs and completed results from disk rather than Main conversation memory.",
-    "prompt": "R1 finishes and writes its result, then Main crashes once before persisting the transition and once after persisting next_step but before dispatching fix_batch.",
-    "trap": "R1 reruns unnecessarily, the review artifact path is lost, or fix_batch is dispatched with conversationally remembered/unverified inputs.",
+    "description": "从磁盘恢复同级输入和已完成结果，而不是依赖主控对话记忆。",
+    "prompt": "R1 完成并写入结果后，主控分别在持久化迁移前崩溃一次，以及在持久化 next_step 后、派发 fix_batch 前崩溃一次。",
+    "trap": "R1 被无必要地重新运行、评审产物路径丢失，或 fix_batch 使用对话记忆中未验证的输入被派发。",
     "assertions": [
-      {"id": "16.1", "text": "Main persisted active_step with deterministic result_path and input digests before dispatch."},
-      {"id": "16.2", "text": "A valid durable result is ingested without rerunning R1."},
-      {"id": "16.3", "text": "The transition atomically persists next_step and step_handoff with producer, envelope digest, and output artifact digests."},
-      {"id": "16.4", "text": "fix_batch receives only the persisted verified handoff artifacts."}
+      {"id": "16.1", "text": "主控在派发前持久化 active_step，其中包含确定性 result_path 和输入 digest。"},
+      {"id": "16.2", "text": "直接载入有效持久化结果，不重新运行 R1。"},
+      {"id": "16.3", "text": "迁移原子持久化 next_step 和 step_handoff，其中包含生产者、信封 digest 和输出产物 digest。"},
+      {"id": "16.4", "text": "fix_batch 只接收已持久化、已验证的交接产物。"}
     ]
   },
   {
     "id": 17,
     "name": "main-owned-lease-covers-long-direct-review",
-    "description": "Prevents the Cycle Run lease from expiring during a bounded direct Review Step.",
-    "prompt": "R2 may take longer than the previous mutation Step's normal lease duration but the runtime provides a finite Step deadline.",
-    "trap": "No component renews the lease because the Review Step is read-only and Main merely observes it, allowing another run to start concurrently.",
+    "description": "防止 Cycle Run lease 在有界直接评审步骤期间过期。",
+    "prompt": "R2 可能比前一个修改步骤的常规 lease 时长更久，但运行时提供有限步骤 deadline。",
+    "trap": "因为评审步骤只读且主控只观察它，没有组件续期 lease，导致另一个 run 可以并发启动。",
     "assertions": [
-      {"id": "17.1", "text": "Main owns the Cycle Run lease across peer Steps."},
-      {"id": "17.2", "text": "Before dispatch, Main extends expiry beyond the enforced Step deadline plus margin."},
-      {"id": "17.3", "text": "The Review Step never mutates lease metadata."},
-      {"id": "17.4", "text": "Deadline overrun leads to bounded stop/recovery rather than indefinite renewal or concurrent mutation."}
+      {"id": "17.1", "text": "主控跨同级步骤持有 Cycle Run lease。"},
+      {"id": "17.2", "text": "派发前，主控把过期时间延长到强制步骤 deadline 加安全余量之后。"},
+      {"id": "17.3", "text": "评审步骤绝不修改 lease 元数据。"},
+      {"id": "17.4", "text": "超过 deadline 会进入有界停止/恢复，而不是无限续期或并发修改。"}
     ]
   }
 ]

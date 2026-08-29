@@ -1,53 +1,53 @@
-# Comments and Bounded Review
+# 评论与有界评审
 
-Read this reference only for direct comment/review Steps. Main dispatches every Step below as its own direct child. No Step dispatches the next one.
+只有直接评论/评审步骤才读取本文。下面每个步骤都由主控作为自己的直接子级派发。任何步骤都不能派发下一个步骤。
 
-## Batch state machine
+## 批次状态机
 
 ```text
-Main acquires the Cycle Run lease
-Main -> intake_rebase: synchronize/rebase source
-Main -> review_r1: fresh read-only full-MR review through review-guard
-Main -> fix_batch: re-read comments, merge/deduplicate, classify, fix/reject,
-                   perform one supplemental scan, freeze cutoff, validate,
-                   and build canonical R2 evidence
-Main -> review_r2: fresh read-only prospective-final review through review-guard
-Main -> final_fix: optional second and final fix pass plus R3 evidence
-Main -> review_r3: optional fresh read-only targeted verification
-Main -> commit_reply: pre-commit rebase, validate, commit/push if changed,
-                      and reply on every relevant Codebase thread
+主控获取 Cycle Run lease
+主控 -> intake_rebase：同步/rebase source
+主控 -> review_r1：通过 review-guard 执行全新的只读完整 MR 评审
+主控 -> fix_batch：重新读取评论、合并/去重、分类、修复/驳回，
+                    执行一次补充扫描、冻结 cutoff、验证，
+                    并构建规范 R2 证据
+主控 -> review_r2：通过 review-guard 全新只读评审预期最终版本
+主控 -> final_fix：可选的第二次、也是最后一次修复，并构建 R3 证据
+主控 -> review_r3：可选的全新只读定向验证
+主控 -> commit_reply：提交前 rebase、验证、有变更时 commit/push，
+                       并在每个相关 Codebase 线程中回复
 ```
 
-All arrows return through a compact Step Result Envelope. Review Steps and fix/mutation Steps are peers. A fix Step must not create a Reviewer, and a Review Step must not create a fixer.
+所有箭头都通过紧凑步骤结果信封返回。评审步骤与修复/修改步骤互为同级。修复步骤不得创建 Reviewer，评审步骤也不得创建修复者。
 
-R1 is useful work and the comment-coalescing window. Do not sleep for three minutes and do not assume R1 lasts three minutes. The post-R1 read and supplemental scan provide coverage.
+R1 本身就是有效工作，同时充当评论聚合窗口。不要固定等待三分钟，也不要假设 R1 一定持续三分钟。R1 后读取和补充扫描共同提供覆盖。
 
-## Eligible comments
+## 符合处理条件的评论
 
-List open threads with the exact MR URL:
+使用精确 MR URL 列出 open 线程：
 
 ```text
 bytedcli --json codebase mr comment list <MR_URL> --status open
 ```
 
-Identify reviewer-authored additions/edits and compare them with the handled-thread record in [contracts-and-state.md](contracts-and-state.md). Eligible means: no Agent reply, newer reviewer activity, invalidated fix evidence, or missing fix commit. Ignore the Agent's own replies as triggers.
+识别 Reviewer 新增/编辑的内容，并与 [contracts-and-state.md](contracts-and-state.md) 中已处理线程记录比较。符合处理条件是指：没有 Agent 回复、有更新的 Reviewer 活动、修复证据已失效，或修复 commit 已不存在。Agent 自己的回复不能作为触发事件。
 
-Open does not mean unfixed. Reviewer closure is independent of Agent completion.
+open 不代表尚未修复。Reviewer 是否关闭线程与 Agent 是否完成处理相互独立。
 
-## Review-guard dependency and adapter
+## Review Guard 依赖与适配
 
-All R1/R2/R3 calls use the exact compatible `review-guard` package bound in immutable scope. Apply [review-guard-compatibility.md](review-guard-compatibility.md), including its per-round attestation. If the dependency is missing, denied, ambiguous, incompatible, or changes during the listener lifetime, return terminal `blocked_review_dependency`; do not imitate or copy its review logic inside a non-review Step.
+所有 R1/R2/R3 调用都使用不可变范围中绑定的精确兼容 `review-guard` 包。应用 [review-guard-compatibility.md](review-guard-compatibility.md)，包括每轮证明。如果依赖缺失、被拒绝、存在歧义、不兼容，或在监听器生命周期内发生变化，返回终止状态 `blocked_review_dependency`；不得在非评审步骤中模仿或复制其评审逻辑。
 
-Main starts a new direct read-only Review Step for every round with no fixer's reasoning, intended solution, or prior review conclusion. Its prompt begins with `Use $review-guard` or `/review-guard` when the runtime requires slash-skill syntax. Give it:
+每轮都由主控启动一个新的直接只读评审步骤，不携带修复者推理、预期方案或历史评审结论。prompt 以 `使用 $review-guard` 开头；运行时要求 slash-skill 语法时，以 `/review-guard` 开头。向其提供：
 
-- MR URL and repository path.
-- Round name and exact target/source heads, patchset, worktree diff hash, and requested review boundary.
-- Repository review rules if present.
-- A temporary review directory outside both the worktree and Git common directory for its native report and canonical evidence.
-- Instruction to apply `review-guard`'s finding gate and report only current-scope P0-P2 defects with confidence at least 7/10. Do not request its optional maintainability/refactoring pass.
-- Instruction that it is a direct child of Main and must not delegate, spawn, dispatch, or request another agent; this already-fresh Review Step performs its grouped review sequentially.
+- MR URL 和仓库路径。
+- 轮次名称、精确 target/source head、patchset、worktree diff hash 和所需评审边界。
+- 仓库评审规则（如果存在）。
+- 位于 worktree 和 Git common directory 之外的临时评审目录，用于存放原生报告和规范证据。
+- 应用 `review-guard` 问题准入门槛，只报告当前范围内置信度至少 7/10 的 P0-P2 缺陷。不要请求其可选可维护性/重构评审。
+- 明确说明它是主控的直接子级，不得委派、创建、派发或请求其他 Agent；这个已全新的评审步骤自行串行完成分组评审。
 
-The Review Step must remain read-only: no edit, format-write, stash, clean, commit, push, reply, resolve, CI operation, approval, or merge. Safe focused tests permitted by `review-guard` remain allowed. Write its native Chinese report and the adapter object only in the external temporary review directory. Return to Main only the compact Step Result Envelope with `artifact_path`; Main passes that path to the following direct mutation Step without loading the findings. That mutation Step validates the object, copies immutable report/evidence into the Git-private run artifact, and records the archived path before applying any finding.
+评审步骤必须保持只读：不得编辑、写入式格式化、stash、clean、commit、push、reply、resolve、操作 CI、approve 或 merge。`review-guard` 允许的安全聚焦测试仍可执行。原生中文报告和适配器对象只能写入外部临时评审目录。只向主控返回带 `artifact_path` 的紧凑步骤结果信封；主控不加载问题内容，直接把该路径传给后续直接修改步骤。该修改步骤验证对象，把不可变报告/证据复制到 Git 私有 run 产物中，并在应用任何问题前记录归档路径。
 
 ```json
 {
@@ -71,14 +71,14 @@ The Review Step must remain read-only: no edit, format-write, stash, clean, comm
   },
   "findings": [],
   "validation": [
-    {"command": "exact command", "result": "pass|fail|blocked|not_run", "reason": "short evidence"}
+    {"command": "精确命令", "result": "pass|fail|blocked|not_run", "reason": "简短证据"}
   ],
-  "limitations": ["missing external fact or empty"],
+  "limitations": ["缺失的外部事实；没有则为空"],
   "native_report_path": "/absolute/external-temp/review-guard-rN.md"
 }
 ```
 
-Each `findings` item uses this mapping of `review-guard`'s native finding contract:
+每个 `findings` 项使用以下 `review-guard` 原生问题契约映射：
 
 ```json
 {
@@ -88,121 +88,121 @@ Each `findings` item uses this mapping of `review-guard`'s native finding contra
   "file": "path",
   "line_start": 42,
   "line_end": 42,
-  "trigger": "concrete input, state, ordering, caller, or deployment condition",
-  "impact": "observable consequence",
-  "evidence": "current code path, reproduction, or test evidence",
-  "action": "smallest root-cause fix direction",
+  "trigger": "具体输入、状态、时序、调用方或部署条件",
+  "impact": "可观察后果",
+  "evidence": "当前代码路径、复现或测试证据",
+  "action": "针对根因的最小修复方向",
   "scope": "introduced|exposed|materially_worsened",
-  "fingerprint": "normalized value"
+  "fingerprint": "规范化值"
 }
 ```
 
-Main validates only the compact envelope and artifact containment. The receiving direct mutation Step loads the adapter object and recomputes `review_skill_digest_received`. Reject as `blocked_review_dependency` unless the canonical root, before/after/received digests, and immutable scope binding all match. Repeat the digest check before applying any finding and at the pre-commit and pre-push gates. Separately return `blocked_review_incomplete` when the scope binding is stale/missing, the verdict is `无法完成可靠 Review`, the native report is absent, or any accepted finding fails the `review-guard` finding gate. Optional refactoring, style preference, speculative candidates below 7/10, and unrelated historical debt never enter the automatic fix set.
+主控只验证紧凑信封和产物路径边界。接收结果的直接修改步骤加载适配器对象并重新计算 `review_skill_digest_received`。只有规范 root、before/after/received digest 和不可变范围绑定全部匹配时才能接受，否则返回 `blocked_review_dependency`。应用任何问题前，以及提交前和推送前门禁，都要重复 digest 检查。当范围绑定过时/缺失、结论为 `无法完成可靠 Review`、原生报告不存在，或任何已接受问题不满足 `review-guard` 问题准入门槛时，单独返回 `blocked_review_incomplete`。可选重构、样式偏好、低于 7/10 的推测候选项和无关历史债务绝不能进入自动修复集。
 
-## R1 reviewer contract
+## R1 Reviewer 契约
 
-R1 runs after the initial rebase and before comment aggregation finishes. Its boundary is the explicit target SHA through the exact rebased private-worktree head. Because that prospective head may not yet be the remote MR patchset, do not ask `review-guard` to infer refs from the MR URL: invoke its explicit base/head scope, record the observed remote patchset separately, and apply the result only while those local SHAs and diff hash remain unchanged. It is a discovery review, but not a repository-wide audit or maintainability pass.
+R1 在初始 rebase 后、评论聚合完成前运行。其边界从明确 target SHA 到完成 rebase 的精确私有 worktree head。由于这个预期 head 可能尚未成为远端 MR patchset，不要让 `review-guard` 根据 MR URL 推断 ref；应使用明确 base/head 范围调用，单独记录观测到的远端 patchset，并且只有这些本地 SHA 和 diff hash 保持不变时才能应用结果。R1 是发现型评审，但不是全仓审计或可维护性评审。
 
-## R2 composite evidence and R3 coverage
+## R2 组合证据与 R3 覆盖
 
-R2 reviews a prospective final MR that combines committed MR history with the active run's staged, unstaged, and untracked files. Do not call `review-guard` in only base/head mode or only working-tree mode, because either view is incomplete.
+R2 评审预期最终 MR，它同时包含已提交 MR 历史和 active run 的 staged、unstaged、untracked 文件。不得只以 base/head 模式或只以 working-tree 模式调用 `review-guard`，因为两种单独视图都不完整。
 
-The direct `fix_batch` Step builds canonical R2 evidence in the external review directory without staging repository files solely for review:
+直接 `fix_batch` 步骤在外部评审目录构建规范 R2 证据，不得仅为了评审而 stage 仓库文件：
 
-1. Verify every dirty/untracked path is owned by the active run; unexplained paths block the batch.
-2. Resolve the exact target SHA, current worktree `HEAD`, and their merge base. Require the target relationship expected after rebase.
-3. Generate one binary rename-aware diff from that merge base to the current working tree. This includes committed, staged, and unstaged tracked changes.
-4. Enumerate untracked files with `git ls-files --others --exclude-standard -z` and append a binary `/dev/null` diff for every owned untracked path, preserving NUL-safe path handling.
-5. Write a manifest containing round, target SHA, committed HEAD, merge base, porcelain-v2 status hash, sorted included paths, untracked path/content hashes, prospective patch SHA-256, and resulting worktree diff hash.
-6. Give both patch and manifest to the fresh direct `review_r2` Step. It invokes `review-guard`, verifies current file bytes/status still match the manifest, and treats this explicit prospective change set as canonical evidence.
+1. 验证每个 dirty/untracked 路径都属于 active run；无法解释的路径会阻塞批次。
+2. 解析精确 target SHA、当前 worktree `HEAD` 以及它们的 merge base。要求 target 关系符合 rebase 后预期。
+3. 从该 merge base 到当前 working tree 生成一个支持 rename 的 binary diff，包含 committed、staged 和 unstaged tracked 变更。
+4. 使用 `git ls-files --others --exclude-standard -z` 枚举 untracked 文件，并为每个本轮拥有的 untracked 路径追加 binary `/dev/null` diff，同时保持 NUL-safe 路径处理。
+5. 写入 manifest，包含轮次、target SHA、committed HEAD、merge base、porcelain-v2 status hash、排序后的纳入路径、untracked 路径/内容 hash、预期 patch SHA-256 和最终 worktree diff hash。
+6. 把 patch 和 manifest 都交给全新的直接 `review_r2` 步骤。它调用 `review-guard`，验证当前文件字节/status 仍与 manifest 匹配，并把这个明确的预期变更集作为规范证据。
 
-Before applying R2's final fix pass, preserve the R2 manifest/patch and snapshot every path in the complete R2 prospective file set, not only files named by findings. If the planned fix must touch an additional path, snapshot that path before its first write and add it to the allowed final-fix path set. After the fix, rebuild the complete prospective evidence and generate a binary last-fix delta across the full before/after snapshot set, including additions, modifications, deletions, and mode changes.
+应用 R2 最终修复前，保留 R2 manifest/patch，并对完整 R2 预期文件集中的每个路径做快照，而不只是问题提到的文件。如果计划中的修复必须触碰额外路径，在首次写入前为该路径做快照，并加入允许的最终修复路径集。修复后重建完整预期证据，并针对完整前后快照集生成 binary last-fix delta，包含新增、修改、删除和 mode 变化。
 
-Compare the post-fix status/path set with the allowed snapshot set before R3. Any changed path that lacks a pre-write snapshot means the delta is not trustworthy: return `blocked_review_incomplete`, quarantine the batch, and do not reconstruct, commit, or push it.
+R3 前比较修复后 status/path 集与允许的快照集。任何已变更路径缺少写入前快照，都表示 delta 不可信：返回 `blocked_review_incomplete`，隔离批次，不得重建、commit 或 push。
 
-R3 receives:
+R3 接收：
 
-- every accepted R2 finding fingerprint;
-- the before/after prospective manifest digests;
-- the last-fix-delta patch and hash;
-- the exact paths/symbols changed by the final fix.
+- 每个已接受 R2 问题的 fingerprint；
+- 修复前后预期 manifest digest；
+- last-fix-delta patch 和 hash；
+- 最终修复改变的精确路径/符号。
 
-R3's adapter result must set `required_fingerprints` to that exact list and provide one `fingerprint_coverage` record per item with `resolved|still_present|not_reproducible`, current evidence, and affected location. It must also echo the reviewed prospective patch and last-fix-delta hashes. Missing/duplicate coverage or a digest mismatch returns `blocked_review_incomplete`.
+R3 的适配器结果必须把 `required_fingerprints` 设为该精确列表，并为每一项提供一条 `fingerprint_coverage` 记录，包含 `resolved|still_present|not_reproducible`、当前证据和受影响位置。它还必须回显已评审的预期 patch 和 last-fix-delta hash。coverage 缺失/重复或 digest 不匹配时，返回 `blocked_review_incomplete`。
 
-## Merge comments and Review Guard findings
+## 合并评论与 Review Guard 问题
 
-After R1 completes, fetch open comments again. Normalize each Codebase comment and `review-guard` finding by file, symbol/region, and factual claim.
+R1 完成后，再次获取 open 评论。按文件、符号/区域和事实主张规范化每条 Codebase 评论与 `review-guard` 问题。
 
-- Same issue in both sources: one fix, Codebase thread is the external reply anchor.
-- Same issue across multiple Codebase threads: one fix, separate reply on every thread.
-- Internal-only P0-P2 finding accepted by `review-guard`: fix it when in scope; do not create a new MR comment that would trigger the listener itself.
+- 两个来源是同一问题：只修复一次，以 Codebase 线程作为外部回复锚点。
+- 多个 Codebase 线程是同一问题：只修复一次，但在每个线程分别回复。
+- 仅内部发现且被 `review-guard` 接受的 P0-P2 问题：范围内应修复；不要新建会触发监听器自身的 MR 评论。
 
-All accepted P0-P2 findings enter the unified problem set because this Autopilot was explicitly asked to fix issues discovered by review. If even the smallest P2 action would require a material redesign or scope expansion, classify it as `unclear` and block for direction rather than ignoring it or broadening the MR.
+所有已接受的 P0-P2 问题都进入统一问题集，因为本 Autopilot 已被明确要求修复评审发现的问题。如果即使最小 P2 修复也需要实质重新设计或扩展范围，将其分类为 `unclear` 并阻塞等待指示，不得忽略问题或擅自扩大 MR。
 
-## Factual dispositions
+## 事实处理结论
 
-Assign exactly one:
+必须且只能分配一个：
 
-- `confirmed_unfixed`: current head reproduces or proves the issue; implement a focused fix.
-- `confirmed_already_fixed`: current head satisfies the requirement; do not change code, but reply with current evidence.
-- `partially_confirmed`: only a precise subset is factual; fix that subset and explain the rejected portion.
-- `false_positive`: the claim conflicts with current code/behavior/test evidence; reject with evidence.
-- `duplicate`: another item in this batch covers it; attach it to the same fix commit.
-- `unclear`: multiple interpretations would materially change the implementation; ask for clarification and block merge without guessing.
+- `confirmed_unfixed`：当前 head 能复现或证明问题；实施聚焦修复。
+- `confirmed_already_fixed`：当前 head 已满足要求；不修改代码，但用当前证据回复。
+- `partially_confirmed`：只有明确子集事实成立；修复该子集，并解释被驳回部分。
+- `false_positive`：主张与当前代码/行为/测试证据冲突；用证据驳回。
+- `duplicate`：本批次其他项已覆盖；关联到同一个修复 commit。
+- `unclear`：不同理解会实质改变实现；提出澄清问题并阻止合并，不得猜测。
 
-## Determine whether an open comment is already fixed
+## 判断 open 评论是否已修复
 
-1. Map its old line anchor, symbol, scenario, or invariant to the current source head.
-2. Inspect the current execution path, not only the original patch location.
-3. Reproduce the reported failure when practical, or run a targeted existing/new test.
-4. Confirm any claimed fix commit remains in current source history and the behavior has not regressed.
-5. Save concrete evidence: current code location, command, result, and commit/head.
+1. 把旧行锚点、符号、场景或不变量映射到当前 source head。
+2. 检查当前执行路径，不要只看原始 patch 位置。
+3. 可行时复现所报告故障，或运行聚焦的已有/新增测试。
+4. 确认声称的修复 commit 仍在当前 source 历史中，且行为没有回归。
+5. 保存具体证据：当前代码位置、命令、结果和 commit/head。
 
-Thread state never substitutes for this evidence.
+线程状态绝不能替代这些证据。
 
-## Fix pass and supplemental scan
+## 修复与补充扫描
 
-Implement all accepted R1/comment findings as one coherent batch. Prefer focused tests that fail for the reported behavior before the fix and pass after it when practical.
+把所有已接受的 R1/评论问题作为一个内聚批次修复。可行时，优先编写或运行能在修复前因所报告行为失败、修复后通过的聚焦测试。
 
-Before committing, fetch open comments exactly once more:
+提交前，恰好再获取一次 open 评论：
 
-- Include reviewer activity newer than the post-R1 snapshot.
-- Classify and handle those comments immediately; do not run another full R1 and do not wait.
-- Record the scan timestamp/comment high-water mark as the batch cutoff.
-- Leave comments arriving after cutoff for the next Cycle Run.
+- 纳入晚于 R1 后快照的 Reviewer 活动。
+- 立即分类和处理这些评论；不再执行完整 R1，也不等待。
+- 把扫描时间戳/comment high-water mark 记录为批次 cutoff。
+- cutoff 后到达的评论留给下一次 Cycle Run。
 
-The changes from supplemental comments are included in R2.
+补充评论产生的变更纳入 R2。
 
-## Bounded convergence
+## 有界收敛
 
-Main owns and persists this fixed budget per batch. Individual peer Steps may consume only the round/pass assigned to them:
+主控持有并持久化每批次的固定预算。每个同级步骤只能消耗分配给自己的轮次/修复次数：
 
-| Round | Scope | May lead to a fix? |
+| 轮次 | 范围 | 是否可触发修复？ |
 |---|---|---|
-| R1 | Fresh `review-guard` full-MR discovery review before the batch fix | Yes, first fix pass |
-| R2 | Fresh `review-guard` review of the full prospective final MR diff, including the owned working-tree batch and new files | Yes, one final fix pass |
-| R3 | Fresh `review-guard` targeted verification of R2 findings and the last fix delta | No further automatic fix/review cycle |
+| R1 | 批次修复前，由全新 `review-guard` 执行完整 MR 发现型评审 | 是，第一次修复 |
+| R2 | 由全新 `review-guard` 评审完整预期最终 MR diff，包括本轮拥有的工作区批次和新文件 | 是，一次最终修复 |
+| R3 | 由全新 `review-guard` 定向验证 R2 问题和最后修复 delta | 不再触发自动修复/评审循环 |
 
-Rules:
+规则：
 
-- Maximum three review calls and two automatic fix passes.
-- Every round uses a different fresh direct-child Review Step and the same bound `review-guard` package digest.
-- If R1 finds nothing beyond false/already-fixed comments and code does not change, skip R2/R3.
-- A repeated fingerprint that survives its fix attempt blocks immediately; do not retry the same change.
-- If R3 returns any unresolved/new P0-P2 finding with confidence at least 7/10, do not commit known-bad work. Record `blocked_review_nonconvergent`.
-- If target head changes, review binding is invalid. Rebase and re-review only within remaining budget. The `commit_reply` Step returns to Main with the earliest unused `review_r2` or `review_r3`; it never creates the Review Step itself. That round becomes a full rebind review of the rebased prospective final diff. When only R3 remains, it still cannot lead to another automatic fix pass.
-- If target moves again after the last valid review slot, preserve the known batch diff and record `blocked_target_churn`; do not commit or silently restart an unlimited review budget.
-- For either blocking case with uncommitted changes, quarantine the checkout exactly as defined in [contracts-and-state.md](contracts-and-state.md): capture patches/status in the run artifact, persist `dirty_quarantined:<run-id>`, and require explicit human recovery. Never hide the state with stash/reset or hand the dirty checkout to another automatic worker.
+- 最多三次评审调用和两次自动修复。
+- 每轮都使用不同的全新直接子级评审步骤，以及同一个已绑定 `review-guard` package digest。
+- 如果 R1 除误报/已修复评论外没有发现问题，且代码未变化，跳过 R2/R3。
+- 同一 fingerprint 在修复尝试后仍存在时立即阻塞；不得重复同一变更。
+- 如果 R3 返回任何未解决/新增、置信度至少 7/10 的 P0-P2 问题，不得提交已知有问题的工作。记录 `blocked_review_nonconvergent`。
+- target head 变化会使评审绑定失效。只能在剩余预算内 rebase 并重新评审。`commit_reply` 步骤把最早未使用的 `review_r2` 或 `review_r3` 返回给主控；它绝不自行创建评审步骤。该轮改为对完成 rebase 后的预期最终 diff 做完整重新绑定评审。即使只剩 R3，也仍不能触发另一轮自动修复。
+- 如果最后一个有效评审槽位后 target 再次移动，保留已知批次 diff 并记录 `blocked_target_churn`；不得提交，也不得静默重启无限评审预算。
+- 上述任一阻塞发生且存在未提交变更时，严格按 [contracts-and-state.md](contracts-and-state.md) 隔离 checkout：在 run 产物中捕获 patch/status，持久化 `dirty_quarantined:<run-id>`，并要求人工明确恢复。绝不能用 stash/reset 隐藏状态，也不能把脏 checkout 交给其他自动 Worker。
 
-Bind each review result to:
+把每个评审结果绑定到：
 
 ```text
 target_head_sha + source_head_sha + worktree_diff_hash
 ```
 
-## Thread replies
+## 线程回复
 
-Reply using the exact `thread_id`:
+使用精确 `thread_id` 回复：
 
 ```text
 bytedcli codebase mr comment reply <MR_URL> \
@@ -210,15 +210,15 @@ bytedcli codebase mr comment reply <MR_URL> \
   --body-file <reply-file>
 ```
 
-Use a file for nontrivial reply bodies to avoid shell quoting mistakes.
+非简单回复正文应使用文件，避免 shell 引号错误。
 
-- **Fixed**: factual conclusion, focused change, pushed commit SHA, and relevant verification.
-- **Already fixed**: current code/head and evidence proving the issue no longer occurs.
-- **Partially confirmed**: accepted subset, rejected subset with evidence, commit/test.
-- **False positive**: concise rejection reason and current code/test evidence.
-- **Duplicate**: reference the shared fix commit and verification.
-- **Unclear**: ask the minimum clarifying question; do not assert a fix.
+- **已修复：** 事实结论、聚焦变更、已推送 commit SHA 和相关验证。
+- **已经修复：** 当前代码/head，以及证明问题不再发生的证据。
+- **部分成立：** 已接受子集、附证据的驳回子集、commit/test。
+- **误报：** 简洁驳回原因和当前代码/测试证据。
+- **重复：** 引用共享修复 commit 和验证。
+- **不明确：** 提出最小澄清问题；不得宣称已修复。
 
-The direct `commit_reply` Step publishes fix replies only after push and remote-head confirmation. If the batch has no code change, it replies after evidence is complete without creating an empty commit. User-visible reply prose must use Simplified Chinese; keep code, commands, IDs, and SHAs literal when useful.
+直接 `commit_reply` 步骤只有在 push 且确认 remote head 后才发布修复回复。如果批次没有代码变更，在证据完整后直接回复，不创建空 commit。用户可见回复正文必须使用简体中文；有帮助时保留原样代码、命令、ID 和 SHA。
 
-Never call `mr comment resolve` or `unresolve`. Record reply IDs so an open but answered thread is not reprocessed unless the reviewer follows up or the source head invalidates the evidence.
+绝不能调用 `mr comment resolve` 或 `unresolve`。记录回复 ID，确保已回复但仍 open 的线程不会重复处理，除非 Reviewer 继续跟进，或 source head 使原证据失效。

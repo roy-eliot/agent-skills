@@ -1,21 +1,21 @@
-# Git, CI, and Merge
+# Git、CI 与合并
 
-Read this reference for any repository mutation, reply execution, CI action, or merge decision. Commands reflect bytedcli 0.136.0; verify current `--help` before a live write because the command surface may change.
+执行任何仓库修改、回复、CI 操作或合并决策时读取本文。命令以 bytedcli 0.136.0 为准；命令界面可能变化，因此实时写操作前必须验证当前 `--help`。
 
-## Repository preflight
+## 仓库预检
 
-Work only in the authorized dedicated worktree created or validated through [owner-policy-and-worktree.md](owner-policy-and-worktree.md). The source/primary checkout is discovery-only and may be dirty.
+只能在通过 [owner-policy-and-worktree.md](owner-policy-and-worktree.md) 创建或验证、且已授权的专用 worktree 中工作。source/primary checkout 仅用于发现，可以是脏的。
 
-1. Verify the worktree's Git common directory and Codebase remote match the immutable MR scope.
-2. Read the MR with `bytedcli --json codebase mr get <MR_URL>` and record source branch/head and target branch/head.
-3. Confirm the local branch is the recorded private `codebase-mr-autopilot/...` branch, its base is the expected MR source head, and no unrelated user changes exist. The private local branch need not have the same name as the remote MR source branch.
-4. Confirm push permission and branch protection as needed.
-5. If the checkout is dirty from an unknown/crashed run, stop. Do not stash, discard, or overwrite unexplained work.
-6. Never run mutation commands in `source_repo_path`; use `git -C <repo_path>` or set the direct Step Worker working directory to the dedicated worktree explicitly.
+1. 验证 worktree 的 Git common directory 和 Codebase remote 与不可变 MR 范围匹配。
+2. 使用 `bytedcli --json codebase mr get <MR_URL>` 读取 MR，并记录 source branch/head 和 target branch/head。
+3. 确认本地分支是已记录的私有 `codebase-mr-autopilot/...` 分支，其 base 是预期 MR source head，且不存在无关用户变更。私有本地分支不需要与远端 MR source 分支同名。
+4. 按需确认 push 权限和分支保护。
+5. 如果 checkout 因未知/崩溃 run 而为脏，停止。不得 stash、discard 或覆盖无法解释的工作。
+6. 绝不能在 `source_repo_path` 中运行修改命令；使用 `git -C <repo_path>`，或把直接步骤 Worker 的工作目录明确设为专用 worktree。
 
-## Initial and commit-gate rebase
+## 初始 rebase 与提交门禁 rebase
 
-At the start of a comment or code-fix batch:
+评论或代码修复批次开始时：
 
 ```text
 git fetch <remote> \
@@ -24,11 +24,11 @@ git fetch <remote> \
 git rebase refs/codebase-mr-autopilot/<mr-key>/target
 ```
 
-Use the MR-authoritative source and target remotes when they differ. The private refs prevent nonstandard remote fetch configuration from leaving stale remote-tracking refs. Confirm their fetched SHAs equal the fresh MR metadata before rebasing.
+当 source 和 target remote 不同时，使用 MR 权威 remote。私有 ref 可避免非标准 remote fetch 配置留下过期 remote-tracking ref。rebase 前确认 fetch 得到的 SHA 等于最新 MR 元数据。
 
-After the batch is fixed, stage only the explicitly intended batch paths, including any new test files, and inspect the staged diff. If unrelated/unexplained untracked files remain, block instead of assuming autostash will protect them.
+批次修复完成后，只 stage 明确属于该批次的路径，包括所有新测试文件，并检查 staged diff。如果仍有无关/无法解释的 untracked 文件，应阻塞，而不是假设 autostash 会保护它们。
 
-Immediately before every commit, fetch again and always run:
+每次 commit 前立即再次 fetch，并始终运行：
 
 ```text
 git fetch <target-remote> \
@@ -36,44 +36,44 @@ git fetch <target-remote> \
 git rebase --autostash refs/codebase-mr-autopilot/<mr-key>/target
 ```
 
-Use `--autostash` only after the intended batch paths are staged and accounted for. Compare the fetched target head with the head bound to the latest valid review. After rebase, verify the intended staged changes were restored before testing or committing.
+只有预期批次路径均已 stage 且完成核对后，才能使用 `--autostash`。把 fetch 得到的 target head 与最近一次有效评审绑定的 head 比较。rebase 后，在测试或 commit 前验证预期 staged 变更已恢复。
 
-- Unchanged target: the required pre-commit rebase should be a no-op; rerun the affected validation after it.
-- Advanced target: the rebase invalidates the old review binding. The direct `commit_reply` Step reruns affected validation, recomputes the worktree diff hash, writes a rebind request artifact, and returns to Main with the earliest unused `review_r2` or `review_r3`. Main directly dispatches that Review Step. If no adequate review slot remains, preserve the known batch diff and return `blocked_target_churn` without committing.
-- Conflict: inspect it. Resolve only when intent is unambiguous and fully testable; otherwise abort the rebase, preserve evidence, and return `blocked_rebase_conflict`.
+- target 未变化：所需提交前 rebase 应为 no-op；之后重新运行受影响验证。
+- target 已前进：rebase 会使旧评审绑定失效。直接 `commit_reply` 步骤重新运行受影响验证、计算新的 worktree diff hash、写入重新绑定请求产物，并把最早未使用的 `review_r2` 或 `review_r3` 返回给主控。主控直接派发该评审步骤。如果没有足够的评审槽位，保留已知批次 diff，不提交，并返回 `blocked_target_churn`。
+- 发生冲突：检查冲突。只有意图无歧义且能完整测试时才解决；否则 abort rebase、保存证据，并返回 `blocked_rebase_conflict`。
 
-Never commit while the source branch is known to be behind the target branch.
+已知 source 分支落后于 target 分支时，绝不能 commit。
 
-## Validation and commit
+## 验证与提交
 
-Run:
+执行：
 
-- Reproduction/targeted test for every confirmed issue.
-- Affected module tests.
-- Repository-required lint, build, static checks, or generated-file checks.
-- The affected validation again after any rebase.
+- 对每个已确认问题执行复现/定向测试。
+- 受影响模块测试。
+- 仓库要求的 lint、build、静态检查或生成文件检查。
+- 每次 rebase 后再次执行受影响验证。
 
-Before commit, inspect the exact staged file list and staged diff. Do not use a broad add that could capture unrelated files.
+commit 前检查精确 staged 文件列表和 staged diff。不得使用可能纳入无关文件的宽泛 add。
 
-Prefer one coherent commit for the whole comment/review batch. Do not create an empty commit for false-positive, duplicate, or already-fixed-only batches.
+整个评论/评审批次优先使用一个内聚 commit。对于只有误报、重复或已修复问题的批次，不要创建空 commit。
 
-Before push, confirm the remote MR source head still equals the expected pre-push head. Push the private local `HEAD` to the exact recorded MR source branch with an explicit refspec; never rely on upstream defaults.
+push 前，确认远端 MR source head 仍等于预期的推送前 head。使用明确 refspec，把私有本地 `HEAD` push 到精确记录的 MR source 分支；绝不能依赖 upstream 默认值。
 
-- Use ordinary `git push <remote> HEAD:<source-branch>` when history is fast-forward.
-- When rebase rewrote the authorized source branch, bind the lease to the exact previously observed remote SHA:
+- 历史为 fast-forward 时，使用普通 `git push <remote> HEAD:<source-branch>`。
+- rebase 改写了已授权 source 分支时，把 lease 绑定到此前观测到的精确 remote SHA：
 
   ```text
   git push --force-with-lease=<source-branch>:<expected-old-sha> \
     <remote> HEAD:<source-branch>
   ```
 
-- Do not use the shorthand `--force-with-lease` without the exact ref and expected SHA.
-- Never use `--force`.
-- Re-read the MR and confirm the pushed commit is the remote source head before sending fixed replies.
+- 不得使用缺少精确 ref 和预期 SHA 的简写 `--force-with-lease`。
+- 绝不能使用 `--force`。
+- 发送修复回复前，重新读取 MR，确认已 push commit 就是 remote source head。
 
-## bytedcli MR and comments
+## bytedcli MR 与评论
 
-Prefer exact MR URL selectors and JSON for machine-readable reads:
+机器可读操作优先使用精确 MR URL selector 和 JSON：
 
 ```text
 bytedcli --json codebase mr get <MR_URL>
@@ -83,11 +83,11 @@ bytedcli --json codebase mr comment list <MR_URL> --status open
 bytedcli codebase mr comment reply <MR_URL> --thread-id <id> --body-file <file>
 ```
 
-Do not call `mr review --approve`; the merge gate observes human approval. Do not call comment resolve/unresolve.
+不得调用 `mr review --approve`；合并门禁只观察人工审批。不得调用 comment resolve/unresolve。
 
-## CI diagnosis
+## CI 诊断
 
-Use the remote failure first; do not begin by running an unrelated full local suite.
+先查看远端失败；不要先运行无关的本地全量测试。
 
 ```text
 bytedcli --json codebase mr status <MR_URL> --page-size 100
@@ -96,18 +96,18 @@ bytedcli --json codebase checks get -R <repo> --id <check-run-id>
 bytedcli codebase checks log -R <repo> --check-run-id <check-run-id>
 ```
 
-Write large logs into the current run artifact and search them with `rg`; do not paste them into the Supervisor context.
+大型日志写入当前 run 产物，并用 `rg` 搜索；不要粘贴到主控上下文。
 
-Classify the failure:
+对失败分类：
 
-- `code_or_test_defect`: start a fresh fix cycle with the same rebase, validation, and bounded-review rules.
-- `flaky`: rerun only with concrete instability evidence.
-- `infrastructure`: rerun only when logs indicate the code is not responsible.
-- `unknown`: gather more evidence or block; do not guess/rerun repeatedly.
+- `code_or_test_defect`：使用相同 rebase、验证和有界评审规则启动全新修复循环。
+- `flaky`：只有具体不稳定证据时才 rerun。
+- `infrastructure`：只有日志表明代码不应负责时才 rerun。
+- `unknown`：收集更多证据或阻塞；不得猜测/反复 rerun。
 
-## Check operation and pipeline retry
+## Check 操作与流水线重试
 
-Check-run operations are dynamic. Inspect the current `Operations` array from JSON and select a current operation whose label/description actually means rerun:
+Check-run operation 是动态的。检查 JSON 中当前 `Operations` 数组，并选择 label/description 确实表示 rerun 的当前 operation：
 
 ```text
 bytedcli --json codebase checks list -R <repo> --mr <MR_URL> --page-size 100
@@ -115,9 +115,9 @@ bytedcli codebase checks operate -R <repo> \
   --payload-json '{"CheckRunId":"<id>","OperationId":"<current-operation-id>"}'
 ```
 
-Never hard-code a universal rerun operation ID.
+绝不能硬编码通用 rerun operation ID。
 
-For a git-backed pipeline, discover its name before running it:
+对于 git-backed pipeline，运行前先发现其名称：
 
 ```text
 bytedcli --json codebase pipeline list -R <repo> --branch <source-branch>
@@ -125,34 +125,34 @@ bytedcli --json codebase pipeline status -R <repo> --branch <source-branch> --pi
 bytedcli codebase pipeline run -R <repo> --branch <source-branch> --pipeline <name>
 ```
 
-Record `HEAD + check/pipeline + failure fingerprint` before a retry. Default maximum is one retry for the same fingerprint. A repeated failure returns `blocked_ci_nonconvergent`; it does not trigger another run.
+重试前记录 `HEAD + check/pipeline + failure fingerprint`。默认同一 fingerprint 最多重试一次。重复失败时返回 `blocked_ci_nonconvergent`，不再触发下一次运行。
 
-## Merge gate
+## 合并门禁
 
-Read fresh state immediately before enqueue. Require all:
+入队前立即读取最新状态。必须同时满足：
 
-- MR is open.
-- Human approval requirements are satisfied.
-- No eligible comment or clarification blocker exists. Threads may remain open after an evidence-backed Agent reply because the reviewer owns closure.
-- Required checks are successful; no required pending/running check remains.
-- MR is mergeable.
-- Remote source head equals the reviewed, tested, pushed head.
-- Source is not behind target; perform the final target-head comparison/rebase gate.
-- Authorization includes `merge_rebase`.
+- MR 为 open。
+- 已满足人工审批要求。
+- 不存在符合处理条件的评论或等待澄清 blocker。Agent 用证据回复后线程可以仍为 open，因为关闭权属于 Reviewer。
+- required check 全部成功；没有 required pending/running check。
+- MR 可合并。
+- remote source head 等于已评审、已测试、已 push 的 head。
+- source 不落后于 target；执行最终 target-head 比较/rebase 门禁。
+- 授权包含 `merge_rebase`。
 
-Then enqueue exactly:
+然后精确执行：
 
 ```text
 bytedcli codebase mr queue enqueue <MR_URL> --merge-method rebase_merge
 ```
 
-Before enqueue, query queue entries. If an active entry already exists for this MR/head, return `queued` without enqueueing again. After a new enqueue, confirm queue state with:
+入队前查询 queue entry。如果当前 MR/head 已存在 active entry，返回 `queued`，不再次入队。新入队后使用以下命令确认 queue 状态：
 
 ```text
 bytedcli --json codebase mr queue entries <MR_URL>
 bytedcli --json codebase mr status <MR_URL> --page-size 100
 ```
 
-Queue entry is `queued`, not `merged`. The direct `merge_gate` Step persists its result and returns to Main. Main releases the Cycle Run lease, continues native-loop ticks, and stops only when a fresh direct `intake_route` Step reports `merged`.
+进入 queue 是 `queued`，不是 `merged`。直接 `merge_gate` 步骤持久化结果并返回主控。主控释放 Cycle Run lease、继续原生循环 tick，只有全新的直接 `intake_route` 步骤报告 `merged` 时才停止。
 
-If the MR is closed without merge, persist `closed_unmerged`. If queue/check state changes or new reviewer feedback arrives, Main routes the next Cycle Run through the corresponding direct comment/CI Steps before attempting enqueue again.
+如果 MR 关闭但未合并，持久化 `closed_unmerged`。如果 queue/check 状态变化或收到新的 Reviewer 反馈，主控在再次尝试入队前，把下一次 Cycle Run 路由到对应直接评论/CI 步骤。

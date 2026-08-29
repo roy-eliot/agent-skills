@@ -1,104 +1,104 @@
-# Maintainability and Refactoring Pass
+# 可维护性与重构评审
 
-Read this reference only when the user requests a complete/deep review, architecture or code-quality assessment, simplification, refactoring guidance, or fix-ready output. This pass complements defect review; it does not relax the finding gate.
+仅当用户要求完整/深度评审、架构或代码质量评估、简化、重构指导或可直接修复的输出时，才读取本文。本轮检查补充缺陷评审，但不会放宽问题准入门槛。
 
-## 1. Separate Defects From Recommendations
+## 1. 区分缺陷与建议
 
-Classify an observation as a P0-P2 finding only when it satisfies the trigger, impact, anchor, action, and confidence requirements in `finding-and-report-contract.md`.
+只有观察项满足 `finding-and-report-contract.md` 中的触发条件、影响、锚点、行动和置信度要求时，才能归类为 P0-P2 问题。
 
-Put useful non-defect improvements in a separate `建议项` section. They do not block the merge verdict. Do not invent a P3 tier merely to make preferences look like defects.
+有价值的非缺陷改进应放在单独的 `建议项` 章节中，且不能阻止合并。不得为了把偏好包装成缺陷而虚构 P3 级别。
 
-A recommendation should still be concrete:
+建议仍必须具体：
 
-- name the current maintenance cost or change risk
-- anchor it to a function, type, package, or repeated behavior
-- explain the smallest simplifying move
-- state whether it belongs in the current change or a follow-up
+- 说明当前维护成本或变更风险
+- 锚定到函数、类型、包或重复行为
+- 解释最小简化动作
+- 说明应在当前变更处理还是后续跟进
 
-Drop generic advice such as “improve naming,” “add comments,” “use a design pattern,” or “increase test coverage” without a specific reason and location.
+没有具体原因和位置时，删除“改进命名”“增加注释”“使用设计模式”或“提高测试覆盖率”等泛化建议。
 
-## 2. Prefer the Smallest Behavior-Preserving Change
+## 2. 优先选择保持行为的最小变更
 
-Unless the user explicitly authorizes a behavior or contract change:
+除非用户明确授权改变行为或契约：
 
-- preserve public APIs, wire formats, persisted data, error semantics, side-effect ordering, and repository conventions
-- prefer deletion, consolidation, early returns, clearer names, or extraction of a cohesive helper over a broad rewrite
-- avoid new interfaces, factories, registries, reflection, generics, configuration layers, or dependencies unless they remove a demonstrated source of change cost
-- split a larger refactor into safe stages when the final shape cannot be validated atomically
-- identify compatibility and rollout work before recommending cross-boundary restructuring
+- 保持 public API、wire format、持久化数据、错误语义、副作用顺序和仓库惯例
+- 相比大范围重写，优先删除、收敛、提前返回、更清晰的命名或提取内聚 helper
+- 除非能消除已证明的变更成本来源，否则避免新增 interface、factory、registry、reflection、generics、配置层或依赖
+- 如果最终形态无法一次性验证，把大型重构拆成安全阶段
+- 推荐跨边界重构前，先明确兼容性和发布工作
 
-Do not recommend a rewrite merely because a different design is cleaner in isolation.
+不能仅因为另一种设计孤立来看更整洁，就建议重写。
 
-## 3. Structure and Responsibility
+## 3. 结构与职责
 
-Review structure through concrete change pressure rather than textbook layering.
+通过具体变更压力评审结构，而不是套用教科书分层。
 
-- Does one function or type own unrelated reasons to change?
-- Is a business rule duplicated across handlers, services, repositories, jobs, or adapters and already at risk of divergence?
-- Does the change bypass an established boundary or force callers to understand an implementation detail?
-- Is a public abstraction broader than its actual consumers, or is repeated switching evidence that one stable seam is missing?
-- Are orchestration, policy, I/O, mapping, and persistence mixed in a way that makes failures or tests difficult to isolate?
-- Would merging, moving, or deleting code reduce concepts without hiding behavior?
+- 一个函数或类型是否承担了彼此无关的变更原因？
+- 某项业务规则是否重复存在于 handler、service、repository、job 或 adapter 中，并已面临分叉风险？
+- 变更是否绕过既有边界，或迫使调用方理解实现细节？
+- public 抽象是否远宽于实际使用方，或者重复 switch 是否表明缺少一个稳定接缝？
+- orchestration、policy、I/O、mapping 和 persistence 是否混在一起，导致故障或测试难以隔离？
+- 合并、移动或删除代码能否在不隐藏行为的前提下减少概念？
 
-Recommend splitting or abstraction only when it improves a named caller, change path, ownership boundary, or test seam. Recommend merging or deletion when indirection carries no distinct contract.
+只有拆分或抽象能改善明确的调用方、变更路径、所有权边界或测试接缝时，才提出此类建议。当间接层没有独立契约时，应建议合并或删除。
 
-## 4. Clarity and Simplification
+## 4. 清晰度与简化
 
-Look for maintainability costs that are visible in the current scope:
+寻找当前范围内可见的维护成本：
 
-- duplicated branches or conversions that can drift
-- deep nesting that obscures the main path or cleanup behavior
-- long functions containing multiple independently changing policies
-- booleans, positional parameters, names, or implicit defaults that make calls ambiguous
-- hidden mutation, global state, magic values, or temporal coupling
-- dead compatibility paths, redundant wrappers, or comments that contradict code
+- 可能发生分叉的重复分支或转换
+- 掩盖主路径或清理行为的深层嵌套
+- 包含多个独立变化策略的长函数
+- 让调用含义模糊的 bool、位置参数、命名或隐式默认值
+- 隐藏修改、全局状态、魔法值或时序耦合
+- 已失效的兼容路径、冗余 wrapper 或与代码矛盾的注释
 
-Prefer changes in this order when they solve the demonstrated problem:
+如果能解决已证明的问题，按以下顺序选择变更：
 
-1. delete obsolete or redundant code
-2. merge duplicated behavior at its owning boundary
-3. use guard clauses or direct control flow
-4. extract a cohesive rule or side effect
-5. improve names and make dependencies explicit
-6. introduce an interface or pattern only if simpler options do not preserve the required variation
+1. 删除过时或冗余代码
+2. 在行为所属边界收敛重复逻辑
+3. 使用 guard clause 或直接控制流
+4. 提取内聚规则或副作用
+5. 改进命名并显式表达依赖
+6. 仅当更简单的方案无法保留所需变化时，才引入 interface 或模式
 
-## 5. Design-Pattern Gate
+## 5. 设计模式准入门槛
 
-Do not recommend a named pattern by default. A pattern recommendation must answer all of these:
+默认不要推荐具名设计模式。推荐模式时必须回答：
 
-- What recurring variation or coupling exists now?
-- Which callers or future changes are already affected?
-- Why is a function, direct composition, or data-driven mapping insufficient?
-- Which concepts or branches disappear after the change?
-- What new indirection and maintenance cost does the pattern introduce?
+- 当前存在哪种重复变化或耦合？
+- 哪些调用方或未来变更已经受到影响？
+- 为什么函数、直接组合或数据驱动映射不足以解决？
+- 变更后会消失哪些概念或分支？
+- 该模式会引入哪些新的间接层和维护成本？
 
-If the result is not materially simpler, explicitly recommend keeping the direct design.
+如果结果没有实质变简单，应明确建议保留直接设计。
 
-## 6. Testability
+## 6. 可测试性
 
-Assess testability as the ability to prove supported behavior, not as dependency-injection or coverage theater.
+把可测试性理解为证明受支持行为的能力，而不是依赖注入或覆盖率表演。
 
-- identify the behavior and layer that should own the test
-- isolate nondeterministic inputs such as time, randomness, concurrency, network, filesystem, or global process state only when they block reliable proof
-- prefer pure helpers or narrow seams over broad mock-heavy interfaces
-- cover material normal, error, boundary, cancellation, retry, idempotency, and concurrency paths activated by the change
-- ensure assertions observe the contract rather than implementation call counts unless ordering or invocation count is itself the contract
+- 明确行为以及应负责该测试的层
+- 仅当时间、随机性、并发、网络、文件系统或全局进程状态等非确定性输入阻碍可靠证明时，才隔离它们
+- 优先使用纯 helper 或窄接缝，而非依赖大量 mock 的宽 interface
+- 覆盖变更激活的重要正常、错误、边界、取消、重试、幂等和并发路径
+- 除非顺序或调用次数本身就是契约，否则断言应观察契约，而非实现调用次数
 
-A missing-test recommendation must name a concrete regression the test would catch.
+缺少测试的建议必须指出该测试能够捕获的具体回归。
 
-## 7. Fix-Ready Output
+## 7. 可直接修复的输出
 
-Review remains read-only unless the user explicitly asks for code changes. Distinguish three requests:
+除非用户明确要求修改代码，否则评审仍然只读。区分三类请求：
 
-- **Review only:** report findings and concise repair directions; do not emit a large replacement implementation.
-- **Show a possible fix:** provide the smallest focused diff or snippet, label assumptions, and preserve existing contracts unless a change is explicitly requested.
-- **Apply the fix:** re-check scope and permissions, edit only authorized files, run proportional validation, and report actual changes separately from the original findings.
+- **仅评审：** 报告问题和简洁修复方向；不得输出大段替换实现。
+- **展示一种可能的修复：** 提供最小、聚焦的 diff 或代码片段，标明假设；除非明确要求改变契约，否则保留现有契约。
+- **应用修复：** 重新检查范围和权限，只编辑授权文件，执行与风险相称的验证，并把实际变更与原始问题分开报告。
 
-Do not mix speculative cleanup into a correctness fix. When a refactor is optional, keep it separable from the defect repair.
+不得把推测性清理混入正确性修复。可选重构必须能与缺陷修复分离。
 
-## 8. Optional Report Shape
+## 8. 可选报告结构
 
-Append only the sections that contain material information:
+只追加包含实质信息的章节：
 
 ````markdown
 ## 建议项（不影响合并结论）
@@ -116,4 +116,4 @@ Append only the sections that contain material information:
 ```
 ````
 
-Never add empty architecture, design-pattern, refactoring, or testing sections.
+绝不能添加空的架构、设计模式、重构或测试章节。

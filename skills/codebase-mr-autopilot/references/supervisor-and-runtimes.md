@@ -1,96 +1,96 @@
-# Supervisor and Runtime Adapters
+# 主控与运行时适配器
 
-Use this reference for start/bootstrap and Main/Supervisor modes. The architecture is strictly two layers:
+启动/初始化和主控模式使用本文。架构严格限制为两层：
 
 ```text
-Main/Supervisor Agent
-├── Intake/Rebase Step Worker
-├── R1/R2/R3 Review Step Worker
-├── Fix Step Worker
-├── Commit/Reply Step Worker
-├── CI Step Worker
-└── Merge Step Worker
+主控 Agent
+├── Intake/Rebase 步骤 Worker
+├── R1/R2/R3 评审步骤 Worker
+├── 修复步骤 Worker
+├── Commit/Reply 步骤 Worker
+├── CI 步骤 Worker
+└── 合并步骤 Worker
 ```
 
-Every worker above is a direct child and peer of the others. There is no Cycle Worker parent between Main and a Reviewer. Only Main may dispatch; no Step Worker may create, dispatch, mention-route, or request another agent, task, topic, session, goal worker, or container.
+以上每个 Worker 都是主控的直接子级，并且彼此同级。主控与 Reviewer 之间不存在 Cycle Worker 父级。只有主控可以派发；任何步骤 Worker 都不得创建、派发、mention-route 或请求其他 Agent、task、topic、session、goal worker 或 container。
 
-## Bootstrap preflight
+## 初始化预检
 
-Before creating a listener:
+创建监听器前：
 
-1. Confirm the exact MR URL, runtime, direct-child worker mechanism, and report adapter. Load [owner-policy-and-worktree.md](owner-policy-and-worktree.md), then persist the checkout/worktree binding and authorization record from [contracts-and-state.md](contracts-and-state.md).
-2. Confirm `bytedcli` and Git are available in the current runtime/container; record the authenticated Codebase actor used to distinguish the Agent's own replies. Require an adapter executable only when the user selected that adapter.
-3. Apply [review-guard-compatibility.md](review-guard-compatibility.md): enumerate all same-name discovery candidates, require one distinct canonical compatible package, confirm that a direct Review Step can invoke it, and persist its path/digest. If discovery, compatibility, or invocation is unavailable or ambiguous, stop with `blocked_review_dependency`; never use an internal substitute.
-4. Confirm the source checkout points at the named MR repository. Its dirty state is allowed because bootstrap must not mutate it. Provision or safely reuse the dedicated MR worktree; require that mutation workspace to be clean or owned by the active run.
-5. Confirm the runtime exposes both a native recurring wakeup and a native stop operation.
-6. Confirm Main can start fresh direct-child workers and receive compact Step Result Envelopes. Reject any mechanism that can only implement Review as a child of another worker.
+1. 确认精确 MR URL、运行时、直接子级 Worker 机制和 report adapter。加载 [owner-policy-and-worktree.md](owner-policy-and-worktree.md)，然后持久化 [contracts-and-state.md](contracts-and-state.md) 中的 checkout/worktree 绑定和授权记录。
+2. 确认当前运行时/容器中可使用 `bytedcli` 和 Git；记录已认证 Codebase actor，用于区分 Agent 自己的回复。只有用户选择了某个适配器时，才要求该适配器 executable。
+3. 应用 [review-guard-compatibility.md](review-guard-compatibility.md)：枚举所有同名发现候选项，要求存在唯一不同的规范兼容包，确认直接评审步骤可以调用，并持久化其 path/digest。如果发现、兼容性或调用不可用或存在歧义，使用 `blocked_review_dependency` 停止；绝不能使用内部替代品。
+4. 确认 source checkout 指向指定 MR 仓库。它允许为脏，因为初始化不得修改它。创建或安全复用 MR 专用 worktree；修改工作区必须干净，或由 active run 持有。
+5. 确认运行时同时提供原生周期唤醒和原生停止操作。
+6. 确认主控可以启动全新的直接子级 Worker，并接收紧凑步骤结果信封。任何只能把 Review 实现为另一个 Worker 子级的机制都必须拒绝。
 
-Run one Main tick immediately after bootstrap. Arm the recurring loop only after preflight succeeds and the immediate tick remains nonterminal. If that tick reaches terminal state, persist `scheduler.status=not_armed`, report once in Simplified Chinese, and never create a scheduled task.
+初始化后立即运行一次主控 tick。只有预检成功且立即 tick 未进入终止状态时，才启用周期循环。如果该 tick 进入终止状态，持久化 `scheduler.status=not_armed`，用简体中文报告一次，并且绝不创建 scheduled task。
 
-## Standalone current-runtime start
+## 当前运行时独立启动
 
-Install or link this Skill in the current compatible agent runtime or container. Load the owner policy, bind the automatically provisioned dedicated worktree, invoke `codebase-mr-autopilot` in Start/bootstrap mode, run one immediate Main tick, then arm the runtime-native recurring prompt. No external orchestrator, topic, report command, or adapter credential is required.
+在当前兼容 Agent 运行时或容器中安装或链接本 Skill。加载 owner policy，绑定自动创建的专用 worktree，以启动/初始化模式调用 `codebase-mr-autopilot`，立即运行一次主控 tick，然后启用运行时原生周期 prompt。不需要外部 orchestrator、topic、report command 或适配器凭证。
 
-The runtime must be able to:
+运行时必须能够：
 
-- Keep or recreate Main's compact state context.
-- Stop/cancel its own recurring task on terminal state.
-- Let Main start a fresh direct child without inherited MR details.
-- Let a direct Review Step invoke the bound `review-guard` Skill itself.
-- Prevent every direct child from spawning another child.
-- Return only the compact Step Result Envelope to Main.
+- 保留或重建主控的紧凑状态上下文。
+- 进入终止状态时停止/取消自己的周期 task。
+- 允许主控启动一个不继承 MR 细节的全新直接子级。
+- 允许直接评审步骤自行调用已绑定的 `review-guard` Skill。
+- 阻止每个直接子级继续创建子级。
+- 只向主控返回紧凑步骤结果信封。
 
-Fail closed if it cannot provide these capabilities.
+无法提供这些能力时安全失败。
 
-## Claude Code adapter
+## Claude Code 适配器
 
-Install or link this Skill where Claude Code discovers project/user skills. In a standalone Claude session, run one immediate Main tick and then invoke:
+把本 Skill 安装或链接到 Claude Code 可发现 project/user skill 的位置。在独立 Claude session 中，先立即运行一次主控 tick，然后调用：
 
 ```text
 /loop 1m /codebase-mr-autopilot supervisor <MR_URL>
 ```
 
-When an external adapter must create the session, inject `/loop`, create workers, or return reports, read only that adapter's reference. For botmux, read [botmux-adapter.md](botmux-adapter.md). A standalone Claude session does not load it.
+需要由外部适配器创建 session、注入 `/loop`、创建 Worker 或返回报告时，只读取对应适配器 reference。使用 botmux 时读取 [botmux-adapter.md](botmux-adapter.md)。独立 Claude session 不加载它。
 
-Use this fixed one-minute native schedule. Capture the 8-character job ID confirmed by Claude and bind it once in scope. If a matching task already exists for the exact session, MR URL, and prompt, reuse its ID instead of creating a duplicate. If multiple tasks match, stop with `blocked_scheduler_binding` rather than guessing.
+使用这个固定的一分钟原生调度。捕获 Claude 确认的 8 字符 job ID，并在范围中只绑定一次。如果精确 session、MR URL 和 prompt 已有匹配 task，复用其 ID，不创建重复 task。如果有多个 task 匹配，使用 `blocked_scheduler_binding` 停止，不得猜测。
 
-When work exists, Main advances the persisted phase machine by dispatching fresh peer Step Workers sequentially in the same active turn. It never asks a worker to dispatch the next worker. If no work exists, the Intake Step returns a compact idle result and Main waits for the next tick. Claude may apply deterministic scheduler jitter of up to half the one-minute interval. When Claude is busy, a due prompt waits until the current turn ends and missed intervals do not create parallel catch-up runs. The write lease is the second concurrency guard.
+存在工作时，主控在同一个 active turn 中串行派发全新的同级步骤 Worker，以推进持久化阶段机。主控绝不能要求某个 Worker 派发下一个 Worker。如果没有工作，Intake 步骤返回紧凑 idle 结果，主控等待下一个 tick。Claude 可能应用最多为一分钟间隔一半的确定性 scheduler jitter。Claude 忙碌时，到期 prompt 会等待当前 turn 结束；错过的间隔不会创建并行补跑。写 lease 是第二道并发保护。
 
-Fixed loops do not self-stop. On `merged`, `closed_unmerged`, or a terminal blocker, persist terminal state, release only the owned lease, call the runtime's scheduled-task delete operation for the exact bound task ID, verify it is absent from the task list, and report once in Simplified Chinese. The loop is session-scoped and expires after seven days. If the MR remains open near expiry, atomically create a replacement task, persist its new ID, then cancel the old exact ID; otherwise report `blocked_loop_expiry`. Never overlap two active tasks.
+固定 loop 不会自行停止。出现 `merged`、`closed_unmerged` 或终止 blocker 时，持久化终止状态，只释放本轮拥有的 lease，对精确绑定的 task ID 调用运行时 scheduled-task delete 操作，验证它已从任务列表消失，并用简体中文报告一次。loop 的范围是 session，七天后过期。如果临近过期时 MR 仍为 open，原子创建替代 task、持久化新 ID，再取消精确旧 ID；否则报告 `blocked_loop_expiry`。绝不能让两个 active task 重叠。
 
-Do not use Claude Monitor/background scripts for this Skill. The user requires scheduler-backed native loop wakeups.
+本 Skill 不得使用 Claude Monitor/后台脚本。用户要求使用 scheduler 支持的原生 loop 唤醒。
 
-Official behavior reference: <https://code.claude.com/docs/en/scheduled-tasks>.
+官方行为参考：<https://code.claude.com/docs/en/scheduled-tasks>。
 
-## Other runtime adapter contract
+## 其他运行时适配器契约
 
-Before enabling another CLI, verify its current local help or official documentation and record:
+启用其他 CLI 前，验证其当前本地 help 或官方文档，并记录：
 
-- Exact recurring-prompt start form.
-- Whether the current session is resumed or a new session is created.
-- Exact stop/cancel form and terminal-state behavior.
-- Minimum/maximum cadence and expiry.
-- Direct-child subagent mechanism and result transport.
-- A guarantee or enforceable prompt/policy that direct children cannot delegate further.
-- Whether a missed/busy iteration is queued, skipped, or duplicated.
+- 精确的周期 prompt 启动形式。
+- 是恢复当前 session，还是创建新 session。
+- 精确 stop/cancel 形式和终止状态行为。
+- 最小/最大执行频率和过期时间。
+- 直接子级子 Agent 机制和结果传输方式。
+- 保证或可强制执行的 prompt/policy，确保直接子级不能继续委派。
+- 错过/忙碌的迭代会排队、跳过还是重复。
 
-Fail closed if any of these are unknown. Do not invent raw schedule directives. Do not substitute any external workflow engine's loop for the runtime-native Main loop.
+上述任一项未知时安全失败。不得发明原始 schedule directive。不得用任何外部 workflow engine loop 替代运行时原生主控 loop。
 
-## Main tick and phase dispatch
+## 主控 tick 与阶段派发
 
-Main performs only this sequence:
+主控只执行以下序列：
 
-1. Read scope, durable phase, `active_step`/`step_handoff`, and lease metadata; never read detailed findings or logs.
-2. If terminal state exists, cancel the exact bound runtime-native task ID, verify cancellation, and report once in Simplified Chinese.
-3. If another run owns a valid lease, remain silent or show the single Chinese waiting line defined below. Do not dispatch. If the lease belongs to the current `active_run_id`, recover or continue only through the durable Step protocol.
-4. Otherwise create or resume one `run_id`; Main acquires/renews the Cycle Run lease, persists the next direct child's `active_step`, input artifacts, deterministic result path, and finite deadline, then dispatches it.
-5. Validate its returned envelope against the durable result file and input/output hashes. Atomically persist `next_step` plus `step_handoff`, then dispatch the next direct peer only when `continue_now=true`.
-6. Repeat step 4 sequentially until the batch finishes, waits for remote state, reaches the bounded R1/R2/R3 limit, or blocks. Never have two Step Workers running concurrently for the same MR.
-7. On `queued`, keep looping without enqueueing again. On `merged`, `closed_unmerged`, or terminal `blocked`, cancel the exact task ID and report once.
+1. 读取范围、持久化阶段、`active_step`/`step_handoff` 和 lease 元数据；绝不读取详细问题或日志。
+2. 如果存在终止状态，取消精确绑定的运行时原生 task ID，验证取消，并用简体中文报告一次。
+3. 如果另一个 run 持有有效 lease，保持静默，或只显示下方定义的一行中文等待信息。不得派发。如果 lease 属于当前 `active_run_id`，只能通过持久化步骤协议恢复或继续。
+4. 否则创建或恢复一个 `run_id`；主控获取/续期 Cycle Run lease，持久化下一个直接子级的 `active_step`、输入产物、确定性结果路径和有限 deadline，然后派发。
+5. 根据持久化结果文件和输入/输出 hash 验证返回信封。原子持久化 `next_step` 与 `step_handoff`；只有 `continue_now=true` 时才派发下一个直接同级 Worker。
+6. 串行重复步骤 4，直到批次完成、等待远端状态、达到有界 R1/R2/R3 限制或发生阻塞。同一个 MR 绝不能同时运行两个步骤 Worker。
+7. 返回 `queued` 时继续循环但不再次入队。返回 `merged`、`closed_unmerged` 或终止 `blocked` 时，取消精确 task ID 并报告一次。
 
-Main owns only loop/orchestration metadata: native schedule, lease, phase, active Step publication, compact handoff, Chinese rendering, and stop. It still does not read MR bodies/diffs/logs, run Git/bytedcli business operations, judge findings, modify code, reply, operate CI, or merge.
+主控只持有 loop/orchestration 元数据：原生 schedule、lease、phase、active Step 发布、紧凑交接、中文渲染和停止。它仍然不读取 MR 正文/diff/log，不执行 Git/bytedcli 业务操作，不判断问题，不修改代码，不回复，不操作 CI，也不合并。
 
-Typical comment-batch peers are:
+典型评论批次的同级步骤为：
 
 ```text
 intake_rebase -> review_r1 -> fix_batch -> review_r2
@@ -98,21 +98,21 @@ intake_rebase -> review_r1 -> fix_batch -> review_r2
               -> commit_reply
 ```
 
-CI and merge use direct `ci_diagnose_fix` and `merge_gate` Steps. A code-changing CI Step returns `next_step=review_r2` or another persisted review phase; it does not create a Reviewer itself.
+CI 和合并使用直接 `ci_diagnose_fix` 与 `merge_gate` 步骤。会修改代码的 CI 步骤返回 `next_step=review_r2` 或其他已持久化评审阶段；它不得自行创建 Reviewer。
 
-## Direct Step Worker preference
+## 直接步骤 Worker 选择顺序
 
-Use the first available option:
+使用第一个可用选项：
 
-1. **Runtime-native direct subagent** created by Main with no inherited conversation history beyond scope, phase, and artifact paths.
-2. **Runtime-native isolated task/container** created by Main with the same minimal prompt and compact result contract.
-3. **Explicitly selected external adapter** where Main creates one peer worker and receives the same compact envelope. For botmux, use [botmux-adapter.md](botmux-adapter.md).
+1. **运行时原生直接子 Agent：** 由主控创建，除范围、阶段和产物路径外，不继承对话历史。
+2. **运行时原生隔离 task/container：** 由主控创建，使用同样的最小 prompt 和紧凑结果契约。
+3. **用户明确选择的外部适配器：** 由主控创建一个同级 Worker，并接收相同紧凑信封。使用 botmux 时参考 [botmux-adapter.md](botmux-adapter.md)。
 
-If none is available, fail closed; do not make Main perform MR/Git work. Never reuse a Step Worker conversation for a later phase or tick. Never accept a worker-created Reviewer or fixer.
+如果都不可用，安全失败；不要让主控执行 MR/Git 工作。绝不能为后续阶段或 tick 复用步骤 Worker 对话。绝不能接受由 Worker 创建的 Reviewer 或修复者。
 
-## Direct Step Worker prompt contract
+## 直接步骤 Worker prompt 契约
 
-Main gives the worker only:
+主控只向 Worker 提供：
 
 ```text
 使用 $codebase-mr-autopilot 的 Direct Step Worker 模式。
@@ -126,19 +126,19 @@ MR：<exact URL>
 输入产物：<artifact paths only>
 授权：<persisted scope subset>
 授权来源：<explicit grant or owner-policy path and digest>
-Review Skill：review-guard at <package root>, digest <package digest>
+评审 Skill：位于 <package root> 的 review-guard，digest 为 <package digest>
 所有自然语言字段使用简体中文。只返回紧凑的 Step Result Envelope；详细信息写入运行目录。
 ```
 
-For a Claude child session, use `/codebase-mr-autopilot` instead of `$codebase-mr-autopilot` when slash-skill syntax is required. A Review Step invokes `/review-guard` itself; it still may not delegate.
+Claude 子 session 要求 slash-skill 语法时，使用 `/codebase-mr-autopilot` 而不是 `$codebase-mr-autopilot`。评审步骤自行调用 `/review-guard`；它仍不得继续委派。
 
-If a Step Worker receives any instruction to create another worker, it must not comply. It records `blocked_nested_delegation` with a Chinese explanation and returns control to Main.
+如果步骤 Worker 收到任何创建其他 Worker 的指令，必须拒绝执行。它使用中文说明记录 `blocked_nested_delegation`，并把控制权返回主控。
 
-## Chinese progress and reporting
+## 中文进度与报告
 
-All user-visible text must use Simplified Chinese: runtime commentary, botmux reports, blockers, terminal summaries, and Codebase thread replies. Code symbols, commands, IDs, paths, SHAs, `review-guard` verdicts, and internal enums may remain literal.
+所有用户可见文本都必须使用简体中文：运行时 commentary、botmux 报告、blocker、终止摘要和 Codebase 线程回复。代码符号、命令、ID、路径、SHA、`review-guard` 结论和内部 enum 可以保留原样。
 
-Main never prints raw JSON or English enum values as the report. It renders the envelope's Chinese fields. Recommended concise lines:
+主控绝不能把原始 JSON 或英文 enum 值作为报告输出。它渲染信封中的中文字段。推荐使用以下简洁文案：
 
 - `检测到 4 条待处理评论，正在同步目标分支并准备首轮评审。`
 - `首轮评审完成，确认 2 个问题，正在集中修复。`
@@ -146,13 +146,13 @@ Main never prints raw JSON or English enum values as the report. It renders the 
 - `已进入 rebase merge 队列，继续监听直到 MR 真正合并。`
 - `自动处理已停止：<中文原因>。详细证据：<artifact_path>`
 
-No-change ticks stay silent. A long-running active turn may emit one Chinese line when entering a material phase, but must not stream raw worker reasoning, diffs, logs, or envelopes.
+没有变更的 tick 保持静默。长时间运行的 active turn 进入实质阶段时可以输出一行中文，但不得持续输出原始 Worker 推理、diff、日志或信封。
 
-If a material Step envelope lacks usable Chinese `summary_zh`/`next_action_zh`, Main must not forward its English text or raw JSON. Persist `blocked_output_contract` and render the local Chinese fallback `自动处理已停止：子任务没有返回符合中文输出契约的结果。`.
+如果实质步骤信封缺少可用的中文 `summary_zh`/`next_action_zh`，主控不得转发其中英文文本或原始 JSON。持久化 `blocked_output_contract`，并渲染本地中文降级文案 `自动处理已停止：子任务没有返回符合中文输出契约的结果。`。
 
-Status rendering:
+状态渲染：
 
-| Internal status | User-visible Chinese |
+| 内部 status | 用户可见中文 |
 |---|---|
 | `idle` | 当前没有新的评论或待处理动作。 |
 | `changed` | 已完成本轮修复并推送。 |
@@ -162,4 +162,4 @@ Status rendering:
 | `merged` | MR 已合并，监听已停止。 |
 | `closed_unmerged` | MR 已关闭但未合并，监听已停止。 |
 
-Idle/waiting ticks do not produce verbose reports. Terminal state must be persisted, the exact owned lease released, and the exact native task cancelled and verified before the one final Chinese report. Never archive/delete a runtime session, container, or adapter-owned topic unless the user separately requests it.
+idle/waiting tick 不产生冗长报告。发送唯一一次最终中文报告前，必须持久化终止状态、释放精确持有的 lease，并取消及验证精确原生 task。除非用户另行要求，否则绝不能 archive/delete 运行时 session、container 或适配器拥有的 topic。

@@ -1,54 +1,54 @@
-# Finding and Report Contract
+# 问题与报告契约
 
-## 1. Finding Gate
+## 1. 问题准入门槛
 
-A reportable finding must have all of these:
+可报告的问题必须同时满足以下条件：
 
-- **Current scope:** the problem exists in the pinned patchset or requested local/full-file scope.
-- **Changed behavior:** it is introduced, exposed, or made materially worse by the change. For a full-file/repository audit, it lies inside the explicit audit boundary.
-- **Trigger:** a concrete input, state, ordering, caller, deployment condition, or attack path.
-- **Impact:** an observable correctness, security, compatibility, operations, test-reliability, or material performance consequence.
-- **Anchor:** exact repository-relative file and current line or smallest useful line range.
-- **Action:** the smallest fix direction that addresses the root cause without redesigning unrelated code.
-- **Confidence:** normally at least 7/10 after direct-context verification.
+- **当前范围：** 问题存在于锁定的 patchset，或用户要求的本地/完整文件范围内。
+- **变更行为：** 问题由本次变更引入、暴露或显著恶化。对于完整文件/仓库审计，问题必须位于明确的审计边界内。
+- **触发条件：** 有具体输入、状态、时序、调用方、部署条件或攻击路径。
+- **影响：** 有可观察的正确性、安全性、兼容性、运维、测试可靠性或实质性能后果。
+- **锚点：** 精确的仓库相对文件路径和当前行号，或最小有效行范围。
+- **行动：** 能解决根因且不重新设计无关代码的最小修复方向。
+- **置信度：** 经过直接上下文验证后通常至少达到 7/10。
 
-Validation output alone is not a finding. A failing check becomes a finding only after it is attributed to the reviewed change rather than environment, stale generation, unrelated local work, or pre-existing failure.
+验证输出本身不是问题。只有确认失败检查源于本次评审变更，而非环境、过期生成物、无关本地修改或既有失败后，它才构成问题。
 
-## 2. Severity and Confidence
+## 2. 严重级别与置信度
 
-| Severity | Meaning |
+| 严重级别 | 含义 |
 |---|---|
-| `P0` | Definite or highly probable security breach, data corruption/loss, core-path crash/outage, or irreversible failure; blocks merge/release. |
-| `P1` | Concrete correctness, concurrency, compatibility, rollback, isolation, or operational failure under a named condition; should be fixed before merge. |
-| `P2` | Real lower-impact defect or defensive gap with a demonstrated path; may be followed up when merge risk is acceptable. |
+| `P0` | 确定或极可能发生的安全突破、数据损坏/丢失、核心路径崩溃/中断或不可逆故障；阻止合并/发布。 |
+| `P1` | 在明确条件下会发生的正确性、并发、兼容性、回滚、隔离或运维故障；应在合并前修复。 |
+| `P2` | 已证明触发路径、影响较低的真实缺陷或防御缺口；合并风险可接受时可以后续跟进。 |
 
-Keep confidence independent from severity:
+置信度必须与严重级别相互独立：
 
-- `9-10`: proven from code or reproduced directly
-- `7-8`: strong evidence with a small runtime/environment dependency
-- `5-6`: plausible but missing a material fact; do not present as a finding
-- `1-4`: speculation; drop
+- `9-10`：已从代码证明或直接复现
+- `7-8`：证据充分，仅少量依赖运行时/环境条件
+- `5-6`：看似合理但缺少关键事实；不得作为问题报告
+- `1-4`：推测；删除
 
-Do not inflate severity to make a concern visible. Put missing external facts in limitations or assumptions, not in the defect list.
+不得为了让关注点显眼而夸大严重级别。缺失的外部事实应放入限制或假设，不应放进缺陷列表。
 
-## 3. Prioritization
+## 3. 优先级
 
-Default to at most five findings, sorted by severity then confidence. Never omit a verified `P0` merely to satisfy the limit; if more than five root causes remain, retain all `P0` findings and the highest-risk others, and state that lower-risk findings were not expanded.
+默认最多报告五个问题，先按严重级别、再按置信度排序。绝不能为了满足数量限制而省略已验证的 `P0`；如果仍有五个以上根因，保留全部 `P0` 和其他风险最高的问题，并说明未展开低风险问题。
 
-De-duplicate by root cause. When one defect appears at several lines, choose the line where the fix belongs and mention affected paths in the evidence.
+按根因去重。同一缺陷出现在多行时，选择真正应修复的位置作为锚点，并在证据中说明受影响路径。
 
-## 4. Verdict
+## 4. 结论
 
-- `Needs changes`: at least one verified `P0` or `P1`.
-- `可以合并，但建议跟进`: only verified `P2` findings remain.
-- `LGTM`: no reportable finding remains within the reviewed scope.
-- `无法完成可靠 Review`: scope/evidence is insufficient; state exactly what is missing.
+- `Needs changes`：至少有一个已验证的 `P0` 或 `P1`。
+- `可以合并，但建议跟进`：只剩已验证的 `P2` 问题。
+- `LGTM`：评审范围内没有可报告问题。
+- `无法完成可靠 Review`：范围/证据不足；必须准确说明缺失内容。
 
-Passing tests do not upgrade `Needs changes` when the finding concerns an untested contract. Missing or blocked tests do not automatically downgrade a code-based finding if its trigger is already proven.
+如果问题涉及未被测试覆盖的契约，测试通过不能把 `Needs changes` 升级为可合并。如果触发条件已由代码证明，测试缺失或受阻也不会自动降低该问题的可信度。
 
-## 5. Chinese Report Shape
+## 5. 中文报告结构
 
-Lead with the outcome. Omit empty sections except `范围与限制`.
+先给结论。除 `范围与限制` 外，空章节应省略。
 
 ```markdown
 ## 结论
@@ -76,15 +76,15 @@ Needs changes — [一句话说明最大风险]
 - 限制：[未取得的外部事实、未运行的高成本检查；没有则写 `无`]
 ```
 
-If no findings remain, say `本次范围内未发现需要报告的 P0-P2 问题` and still disclose the exact range and validation coverage.
+如果没有问题，写明 `本次范围内未发现需要报告的 P0-P2 问题`，同时仍须披露精确范围和验证覆盖情况。
 
-Do not pad the report with generic praise, a replay of the workflow, or a checklist full of unevidenced `PASS` values.
+不得用泛泛表扬、工作流程复述或没有证据的 `PASS` 清单填充报告。
 
-When the user requested maintainability, simplification, architecture, refactoring, or fix-ready depth, apply [maintainability-and-refactoring.md](maintainability-and-refactoring.md). Put concrete non-defect observations under `建议项（不影响合并结论）`; never use them to downgrade `LGTM` or inflate P0-P2 issue counts. Provide replacement code or a focused diff only when the user asks to see or apply a fix.
+当用户要求可维护性、简化、架构、重构或可直接修复的深度时，应用 [maintainability-and-refactoring.md](maintainability-and-refactoring.md)。把具体的非缺陷观察放在 `建议项（不影响合并结论）` 下；绝不能用它们降低 `LGTM` 结论或抬高 P0-P2 数量。只有用户要求查看或应用修复时，才提供替换代码或聚焦 diff。
 
-## 6. Comment-Ready Wording
+## 6. 可直接发布的评论措辞
 
-When the user asks for pasteable comments, provide the exact current location and concise Chinese wording:
+用户要求可直接粘贴的评论时，给出精确的当前位置和简洁中文措辞：
 
 ```markdown
 `path/file.go:42`
@@ -92,4 +92,4 @@ When the user asks for pasteable comments, provide the exact current location an
 [P1] 这里从 `context.Background()` 派生超时会切断请求取消和 request-scoped trace/tenant 值；客户端断开后存储调用仍会继续。建议改为 `context.WithTimeout(r.Context(), ...)`，并补一个取消传播回归测试。
 ```
 
-Publishing those comments is a separate authorized action governed by [scope-and-permissions.md](scope-and-permissions.md).
+发布这些评论属于单独授权的操作，受 [scope-and-permissions.md](scope-and-permissions.md) 约束。

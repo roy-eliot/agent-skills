@@ -1,27 +1,27 @@
-# Optional Botmux Adapter
+# 可选 Botmux 适配器
 
-Read this reference only when the user explicitly selects botmux to create/bridge the Main/Supervisor session, start a direct Step Worker, or return compact Chinese reports. The core Skill runs without botmux.
+只有用户明确选择 botmux 来创建/桥接主控 session、启动直接步骤 Worker 或返回紧凑中文报告时，才读取本文。核心 Skill 无需 botmux 也能运行。
 
-## Strict two-layer topology
+## 严格两层拓扑
 
-Botmux must preserve this exact topology:
+Botmux 必须保持以下精确拓扑：
 
 ```text
-one Main/Supervisor bot session
-└── one or more fresh direct Step Worker sessions/goals
+一个主控 bot session
+└── 一个或多个全新的直接步骤 Worker session/goal
 ```
 
-Main creates every Step Worker itself. A Step Worker may not call `botmux dispatch`, `botmux goal run`, `@mention` another agent, create a child topic/session, or ask Main to treat a worker-created session as its child. Reject any adapter configuration that requires `Main -> Cycle Worker -> Reviewer`.
+每个步骤 Worker 都必须由主控亲自创建。步骤 Worker 不得调用 `botmux dispatch`、`botmux goal run`，不得 `@mention` 其他 Agent、创建子 topic/session，也不得要求主控把 Worker 创建的 session 当作主控的子级。任何要求 `Main -> Cycle Worker -> Reviewer` 的适配器配置都必须拒绝。
 
-## Adapter preflight
+## 适配器预检
 
-Confirm the installed botmux version and current `--help` before live dispatch. Persist botmux identifiers only inside adapter configuration; do not add them to the portable core scope.
+实时派发前确认已安装的 botmux 版本和当前 `--help`。botmux 标识符只能持久化在适配器配置中，不要放入可移植的核心范围。
 
-Use one Main listener topic/session per MR. The brief contains only the immutable scope, Skill invocation, Chinese-output requirement, compact-report requirement, and instruction to run one immediate Main tick before arming the runtime-native loop. Never paste the MR diff, comments, CI logs, or English raw envelopes into it.
+每个 MR 使用一个主控监听 topic/session。brief 只包含不可变范围、Skill 调用、中文输出要求、紧凑报告要求，以及启用运行时原生循环前先执行一次主控 tick 的指令。绝不能把 MR diff、评论、CI 日志或英文原始信封粘贴进去。
 
-## Create or bridge the Main session
+## 创建或桥接主控 session
 
-For a stable bot app already bound to the correct repository:
+对于已绑定正确仓库的稳定 bot app：
 
 ```text
 botmux dispatch --title "MR <id> 自动跟进" \
@@ -29,9 +29,9 @@ botmux dispatch --title "MR <id> 自动跟进" \
   --brief-file <absolute-brief-file>
 ```
 
-Current botmux does not support `--repo` with `--bot-app`. Do not combine them.
+当前 botmux 不支持同时使用 `--repo` 和 `--bot-app`。不得组合使用。
 
-For a trusted same-machine legacy bot that needs an explicit working directory:
+对于需要明确工作目录、受信任的同机 legacy bot：
 
 ```text
 botmux dispatch --title "MR <id> 自动跟进" \
@@ -40,9 +40,9 @@ botmux dispatch --title "MR <id> 自动跟进" \
   --brief-file <absolute-brief-file>
 ```
 
-## Inject a Claude native loop
+## 注入 Claude 原生循环
 
-Allow only the required slash command on the selected bot:
+在所选 bot 上只允许必需的 slash command：
 
 ```json
 {
@@ -50,17 +50,17 @@ Allow only the required slash command on the selected bot:
 }
 ```
 
-After one immediate Main tick, inject the runtime-native loop into the same idle Main session:
+主控立即执行一次 tick 后，把运行时原生循环注入同一个空闲主控 session：
 
 ```text
 botmux slash "/loop 1m /codebase-mr-autopilot supervisor <MR_URL>"
 ```
 
-Botmux transports the slash command; Claude still owns the loop. Capture Claude's returned 8-character scheduled-task ID in core scope. On terminal state Claude must delete that exact task ID and verify it no longer appears in its task list. Do not replace it with a botmux workflow loop.
+Botmux 只负责传输 slash command；循环仍由 Claude 持有。把 Claude 返回的 8 字符 scheduled-task ID 记录在核心范围中。进入终止状态时，Claude 必须删除这个精确 task ID，并验证它不再出现在任务列表中。不得用 botmux workflow loop 替代。
 
-## Start one fresh direct Step Worker
+## 启动一个全新的直接步骤 Worker
 
-Prefer the target runtime's native direct subagent. If unavailable, Main itself may use the selected botmux adapter to run one fresh peer goal worker:
+优先使用目标运行时原生的直接子 Agent。如果不可用，主控可以亲自使用所选 botmux 适配器运行一个全新的同级 goal worker：
 
 ```text
 botmux goal run --goal-file <step-goal-file> \
@@ -69,14 +69,14 @@ botmux goal run --goal-file <step-goal-file> \
   --json
 ```
 
-The goal file must contain the Direct Step Worker prompt contract from [supervisor-and-runtimes.md](supervisor-and-runtimes.md), including the ban on nested delegation and the requirement that every natural-language envelope field be Simplified Chinese. Reuse a Step ID only for the same canonical Step. If goal execution is unavailable, Main may directly create one visible child topic/session, but that topic is still a leaf and must return only the compact Step Result Envelope.
+goal 文件必须包含 [supervisor-and-runtimes.md](supervisor-and-runtimes.md) 中的直接步骤 Worker prompt 契约，包括禁止嵌套委派，以及所有自然语言信封字段必须使用简体中文。只有同一个规范步骤才能复用 Step ID。如果 goal 执行不可用，主控可以直接创建一个可见子 topic/session，但该 topic 仍是叶子节点，并且只能返回紧凑步骤结果信封。
 
-Never let a fix worker create an R1/R2/R3 worker. Main receives the fix result first and then creates the Reviewer as a separate peer.
+绝不能让修复 Worker 创建 R1/R2/R3 Worker。主控必须先接收修复结果，再把 Reviewer 作为独立同级 Worker 创建。
 
-## Report and stop
+## 报告与停止
 
-- Material progress or a terminal outcome may use one compact `botmux report`, written in Simplified Chinese.
-- Main renders `summary_zh` and `next_action_zh`; it never forwards raw JSON or English enum values as a human report.
-- Idle/waiting ticks do not produce verbose topic messages.
-- Persist terminal state and release the owned lease before cancelling and verifying the exact bound runtime-native task ID.
-- Never archive/delete the botmux topic unless the user separately requests it.
+- 实质进展或终止结果可以使用一次紧凑的 `botmux report`，内容必须为简体中文。
+- 主控渲染 `summary_zh` 和 `next_action_zh`；绝不能把原始 JSON 或英文 enum 值作为人类报告转发。
+- idle/waiting tick 不产生冗长 topic 消息。
+- 取消并验证精确绑定的运行时原生 task ID 前，先持久化终止状态并释放所持 lease。
+- 除非用户另行要求，否则绝不能 archive/delete botmux topic。

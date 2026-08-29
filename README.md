@@ -33,6 +33,8 @@ agent-skills/
 
 `codebase-mr-autopilot` 与 `review-guard` 是并列 Skill。Autopilot 的 R1/R2/R3 Review 会调用独立的 `review-guard`，因此使用 Autopilot 时必须同时安装两者。不要把 `review-guard` 复制进 Autopilot 目录，也不要在多个发现目录中保留不同实体的同名副本。
 
+两个 Skill 的说明、流程、评测描述和用户可见提示均使用简体中文。为保证跨运行时兼容，Skill 名称、命令、文件路径、JSON key、状态枚举和代码符号仍保留英文原值。
+
 ## 安装
 
 推荐把这个 Git 仓库作为唯一维护源，再把需要的 Skill 链接到各运行时的发现目录。

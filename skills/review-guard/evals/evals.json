@@ -2,204 +2,204 @@
   {
     "id": 1,
     "name": "exact-mr-review-keeps-dirty-worktree-read-only",
-    "description": "Pins the current MR patchset and preserves a dirty checkout during a review-only task.",
-    "prompt": "Review Go MR !123. The current checkout has unrelated staged, unstaged, and untracked work. Only review and report in Chinese; do not change code or touch the remote MR.",
-    "trap": "The reviewer stashes or cleans the worktree, reviews local HEAD instead of the MR source SHA, or silently uses a guessed base branch.",
+    "description": "在只读评审任务中锁定当前 MR patchset，并保留脏 checkout 不变。",
+    "prompt": "评审 Go MR !123。当前 checkout 中有无关的 staged、unstaged 和 untracked 工作。只进行评审并用中文报告；不要修改代码或触碰远端 MR。",
+    "trap": "评审 Agent stash 或清理工作区，评审本地 HEAD 而不是 MR source SHA，或静默使用猜测的 base 分支。",
     "assertions": [
       {
         "id": "1.1",
-        "text": "Reads applicable repository instructions before inspecting the diff."
+        "text": "检查 diff 前读取适用的仓库指令。"
       },
       {
         "id": "1.2",
-        "text": "Refreshes authoritative MR metadata and records exact base and source commit SHAs or stops if they cannot be obtained."
+        "text": "刷新权威 MR 元数据并记录精确的 base 和 source commit SHA；无法获取时停止。"
       },
       {
         "id": "1.3",
-        "text": "Does not stash, clean, reset, switch, edit, commit, push, publish comments, or otherwise mutate the checkout or remote MR."
+        "text": "不执行 stash、clean、reset、switch、编辑、commit、push、发布评论，也不以其他方式修改 checkout 或远端 MR。"
       },
       {
         "id": "1.4",
-        "text": "Uses the pinned commits for both diff and source context, such as git show source_sha:path, so unrelated working-tree changes cannot contaminate evidence."
+        "text": "diff 和源码上下文都使用锁定的 commit，例如 git show source_sha:path，确保无关工作区变更不会污染证据。"
       },
       {
         "id": "1.5",
-        "text": "Produces a Chinese findings-first verdict with exact file and line anchors plus validation limits."
+        "text": "以问题优先的中文形式给出结论，包含精确文件、行号锚点和验证限制。"
       }
     ]
   },
   {
     "id": 2,
     "name": "working-tree-review-includes-untracked-go-files",
-    "description": "Covers staged, unstaged, and untracked files when the user asks to review current local changes.",
-    "prompt": "Review the current Go working-tree changes. A new untracked handler file is part of the work and has not been git-added yet.",
-    "trap": "The reviewer runs only git diff HEAD and silently omits the untracked file.",
+    "description": "用户要求评审当前本地变更时，覆盖 staged、unstaged 和 untracked 文件。",
+    "prompt": "评审当前 Go 工作区变更。一个新的 untracked handler 文件属于本次工作，但尚未执行 git add。",
+    "trap": "评审 Agent 只运行 git diff HEAD，并静默遗漏 untracked 文件。",
     "assertions": [
       {
         "id": "2.1",
-        "text": "Includes staged and unstaged changes relative to HEAD."
+        "text": "包含相对 HEAD 的 staged 和 unstaged 变更。"
       },
       {
         "id": "2.2",
-        "text": "Enumerates untracked files with git ls-files --others --exclude-standard and includes their content in scope."
+        "text": "使用 git ls-files --others --exclude-standard 枚举 untracked 文件，并把内容纳入范围。"
       },
       {
         "id": "2.3",
-        "text": "States the exact working-tree scope instead of presenting it as a committed branch or MR diff."
+        "text": "准确说明工作区范围，不把它表述成已提交分支或 MR diff。"
       },
       {
         "id": "2.4",
-        "text": "Does not git add the untracked file merely to make diff tooling see it."
+        "text": "不会仅为了让 diff 工具看见 untracked 文件而执行 git add。"
       }
     ]
   },
   {
     "id": 3,
     "name": "go-version-aware-range-loop-review",
-    "description": "Avoids reporting a pre-Go-1.22 range-variable warning when the module targets a newer language version.",
-    "prompt": "Review this diff in a module whose go.mod says `go 1.23`: `for _, item := range items { go func() { process(item) }() }`.",
-    "trap": "The reviewer mechanically reports the historical range-loop closure bug without checking the module's Go language version.",
+    "description": "当模块目标语言版本较新时，避免误报 Go 1.22 之前的 range 变量问题。",
+    "prompt": "评审这个 diff，模块的 go.mod 声明 `go 1.23`：`for _, item := range items { go func() { process(item) }() }`。",
+    "trap": "评审 Agent 没有检查模块 Go 语言版本，就机械地报告历史 range 循环闭包问题。",
     "assertions": [
       {
         "id": "3.1",
-        "text": "Checks the go directive and any workspace/toolchain constraints before applying version-sensitive Go rules."
+        "text": "应用版本敏感的 Go 规则前，检查 go 指令以及 workspace/toolchain 约束。"
       },
       {
         "id": "3.2",
-        "text": "Does not report the pre-Go-1.22 per-iteration range-variable capture bug for a Go 1.23 module."
+        "text": "不会对 Go 1.23 模块报告 Go 1.22 之前的每轮 range 变量捕获问题。"
       },
       {
         "id": "3.3",
-        "text": "Still checks whether item points to shared mutable state or whether goroutine lifecycle and cancellation create a different concrete bug."
+        "text": "仍会检查 item 是否指向共享可变状态，以及 goroutine 生命周期和取消是否产生其他具体问题。"
       },
       {
         "id": "3.4",
-        "text": "Does not turn a non-issue into a style suggestion merely to produce output."
+        "text": "不会为了产生输出而把非问题改写成样式建议。"
       }
     ]
   },
   {
     "id": 4,
     "name": "request-context-contract-loss",
-    "description": "Finds a concrete cross-layer context propagation regression and explains its trigger and impact.",
-    "prompt": "Review a Go HTTP-handler diff that replaces `s.store.Get(r.Context(), id)` with `ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second); defer cancel(); s.store.Get(ctx, id)`. The repository propagates tracing and tenant identity through request context.",
-    "trap": "The reviewer praises the timeout or raises only generic context style, missing that Background severs cancellation, trace, and tenant values.",
+    "description": "发现具体的跨层 context 传播回归，并说明触发条件和影响。",
+    "prompt": "评审一个 Go HTTP handler diff：它把 `s.store.Get(r.Context(), id)` 替换为 `ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second); defer cancel(); s.store.Get(ctx, id)`。仓库通过 request context 传播 trace 和租户身份。",
+    "trap": "评审 Agent 表扬新增 timeout，或只提出泛化的 context 样式意见，却遗漏 Background 会切断取消、trace 和租户值。",
     "assertions": [
       {
         "id": "4.1",
-        "text": "Reports that deriving from context.Background severs the request context contract."
+        "text": "报告从 context.Background 派生会切断 request context 契约。"
       },
       {
         "id": "4.2",
-        "text": "Names concrete impact: client cancellation no longer stops the store call and request-scoped trace or tenant values are lost."
+        "text": "指出具体影响：客户端取消不再停止 store 调用，并丢失 request-scoped trace 或租户值。"
       },
       {
         "id": "4.3",
-        "text": "Suggests context.WithTimeout(r.Context(), ...) as the smallest fix."
+        "text": "建议使用 context.WithTimeout(r.Context(), ...) 作为最小修复。"
       },
       {
         "id": "4.4",
-        "text": "Anchors the finding to the changed source line and assigns severity and confidence from the demonstrated trigger path."
+        "text": "把问题锚定到变更源码行，并根据已证明的触发路径确定严重级别和置信度。"
       }
     ]
   },
   {
     "id": 5,
     "name": "large-diff-grouping-without-unrequested-subagents",
-    "description": "Reviews a large cross-package change by functional groups while respecting an explicit no-subagent constraint.",
-    "prompt": "Review a 60-file Go branch diff spanning handler, service, repository, migrations, config, and Helm. Do not use subagents. Keep the review local and read-only.",
-    "trap": "The reviewer either starts subagents anyway, samples only a few files, or reviews each directory independently and misses changed cross-group contracts.",
+    "description": "在遵守明确的禁用子 Agent 限制时，按功能分组评审大型跨包变更。",
+    "prompt": "评审一个包含 60 个文件的 Go 分支 diff，范围覆盖 handler、service、repository、migration、config 和 Helm。不要使用子 Agent。保持本地只读评审。",
+    "trap": "评审 Agent 仍然启动子 Agent、只抽样少数文件，或按目录孤立评审并遗漏发生变化的跨组契约。",
     "assertions": [
       {
         "id": "5.1",
-        "text": "Does not spawn or delegate to subagents."
+        "text": "不会创建子 Agent 或向其委派。"
       },
       {
         "id": "5.2",
-        "text": "Groups files by behavior, call chain, or shared contract rather than arbitrary file-count chunks."
+        "text": "按行为、调用链或共享契约对文件分组，而不是按任意文件数量切块。"
       },
       {
         "id": "5.3",
-        "text": "Reviews every group sequentially and then performs a cross-group pass for API, interface, config, schema, generated-code, and deployment consistency."
+        "text": "串行评审每一组，然后跨组检查 API、interface、config、schema、生成代码和部署一致性。"
       },
       {
         "id": "5.4",
-        "text": "Records any coverage limitation instead of claiming whole-diff coverage without evidence."
+        "text": "记录所有覆盖限制，不在缺乏证据时宣称覆盖完整 diff。"
       }
     ]
   },
   {
     "id": 6,
     "name": "inline-comment-publication-refreshes-and-verifies",
-    "description": "Publishes only explicitly authorized, current-patchset findings and verifies the remote result.",
-    "prompt": "The local report for Go MR !456 has two findings. I now explicitly authorize you to submit them as inline comments. The MR may have received a new patchset since the report was written.",
-    "trap": "The reviewer reuses stale commit IDs and line numbers, duplicates existing discussions, or claims success after draft creation without read-back.",
+    "description": "只发布明确授权且属于当前 patchset 的问题，并验证远端结果。",
+    "prompt": "Go MR !456 的本地报告有两个问题。我现在明确授权你把它们提交为行内评论。报告生成后，MR 可能已经有新 patchset。",
+    "trap": "评审 Agent 复用过期 commit ID 和行号、重复已有讨论，或创建 draft 后未回读就宣称成功。",
     "assertions": [
       {
         "id": "6.1",
-        "text": "Refreshes MR metadata, current patchset, exact diff, and existing discussions before publishing."
+        "text": "发布前刷新 MR 元数据、当前 patchset、精确 diff 和已有讨论。"
       },
       {
         "id": "6.2",
-        "text": "Revalidates each finding against current code and drops or rewrites resolved, outdated, duplicated, or moved findings."
+        "text": "对照当前代码重新验证每个问题，并删除或改写已解决、过时、重复或位置变化的问题。"
       },
       {
         "id": "6.3",
-        "text": "Publishes only confirmed findings on current changed lines, with short actionable Chinese wording."
+        "text": "只在当前变更行发布已确认问题，使用简短、可执行的中文措辞。"
       },
       {
         "id": "6.4",
-        "text": "Reports publication success only after reading back comment IDs, positions, patchset or commit SHAs, and non-outdated thread state."
+        "text": "仅在回读评论 ID、位置、patchset 或 commit SHA，并确认线程未过期后，才报告发布成功。"
       }
     ]
   },
   {
     "id": 7,
     "name": "deep-review-separates-maintainability-from-defects",
-    "description": "Adds concrete simplification guidance without turning design preferences into merge-blocking findings.",
-    "prompt": "Do a deep Go code review of this MR, including architecture, maintainability, and simplification. The changed code adds a fourth copy of the same status mapping, but all current branches are behaviorally correct.",
-    "trap": "The reviewer calls duplication a P1/P2 bug, forces a nine-section template, recommends a design pattern without showing reduced complexity, or omits the requested maintainability assessment.",
+    "description": "提供具体简化指导，同时不把设计偏好包装成阻止合并的问题。",
+    "prompt": "对这个 MR 做一次深度 Go 代码评审，包含架构、可维护性和简化。变更代码增加了同一状态映射的第四份副本，但当前所有分支的行为都正确。",
+    "trap": "评审 Agent 把重复归类为 P1/P2 缺陷、强制使用九章节模板、在没有证明复杂度降低时推荐设计模式，或遗漏用户要求的可维护性评估。",
     "assertions": [
       {
         "id": "7.1",
-        "text": "Keeps the behaviorally correct duplication out of P0-P2 findings and the merge verdict."
+        "text": "不把行为正确的重复代码列入 P0-P2 问题，也不让它影响合并结论。"
       },
       {
         "id": "7.2",
-        "text": "Reports a concrete non-blocking recommendation anchored to the repeated mapping and names its current change cost."
+        "text": "给出锚定到重复映射的具体非阻塞建议，并说明当前变更成本。"
       },
       {
         "id": "7.3",
-        "text": "Suggests the smallest behavior-preserving consolidation at the owning boundary instead of a broad rewrite."
+        "text": "建议在行为所属边界做保持行为的最小收敛，而不是大范围重写。"
       },
       {
         "id": "7.4",
-        "text": "Omits empty architecture or design-pattern sections and does not introduce a named pattern unless it materially reduces concepts."
+        "text": "省略空的架构或设计模式章节；除非能实质减少概念，否则不引入具名模式。"
       }
     ]
   },
   {
     "id": 8,
     "name": "review-only-does-not-turn-into-rewrite",
-    "description": "Preserves the review-only boundary even when the code could be substantially simplified.",
-    "prompt": "Review this Go change only; do not modify files. The main function is long and mixes orchestration, mapping, and I/O. Tell me what must block merge and what could be simplified later.",
-    "trap": "The reviewer edits files, emits a wholesale replacement implementation, or mixes optional restructuring into the blocking defect list.",
+    "description": "即使代码可以显著简化，也保持仅评审的边界。",
+    "prompt": "只评审这个 Go 变更；不要修改文件。主函数很长，并混合了 orchestration、mapping 和 I/O。告诉我哪些问题必须阻止合并，哪些内容可以后续简化。",
+    "trap": "评审 Agent 编辑文件、输出整段替换实现，或把可选重构混入阻塞性缺陷列表。",
     "assertions": [
       {
         "id": "8.1",
-        "text": "Does not edit files or treat a review request as authorization to apply a refactor."
+        "text": "不编辑文件，也不把评审请求视为应用重构的授权。"
       },
       {
         "id": "8.2",
-        "text": "Uses the normal finding gate for merge blockers and keeps optional structural improvements in a separate non-blocking section."
+        "text": "对合并阻塞项使用正常问题准入门槛，并把可选结构改进放在单独的非阻塞章节。"
       },
       {
         "id": "8.3",
-        "text": "Anchors simplification advice to concrete responsibilities or change risks and proposes staged, behavior-preserving steps."
+        "text": "把简化建议锚定到具体职责或变更风险，并提出分阶段、保持行为的步骤。"
       },
       {
         "id": "8.4",
-        "text": "Provides only concise fix directions unless the user separately asks to see code or apply changes."
+        "text": "除非用户另行要求查看代码或应用变更，否则只提供简洁修复方向。"
       }
     ]
   }
