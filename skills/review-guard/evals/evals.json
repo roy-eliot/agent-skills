@@ -1,0 +1,206 @@
+[
+  {
+    "id": 1,
+    "name": "exact-mr-review-keeps-dirty-worktree-read-only",
+    "description": "Pins the current MR patchset and preserves a dirty checkout during a review-only task.",
+    "prompt": "Review Go MR !123. The current checkout has unrelated staged, unstaged, and untracked work. Only review and report in Chinese; do not change code or touch the remote MR.",
+    "trap": "The reviewer stashes or cleans the worktree, reviews local HEAD instead of the MR source SHA, or silently uses a guessed base branch.",
+    "assertions": [
+      {
+        "id": "1.1",
+        "text": "Reads applicable repository instructions before inspecting the diff."
+      },
+      {
+        "id": "1.2",
+        "text": "Refreshes authoritative MR metadata and records exact base and source commit SHAs or stops if they cannot be obtained."
+      },
+      {
+        "id": "1.3",
+        "text": "Does not stash, clean, reset, switch, edit, commit, push, publish comments, or otherwise mutate the checkout or remote MR."
+      },
+      {
+        "id": "1.4",
+        "text": "Uses the pinned commits for both diff and source context, such as git show source_sha:path, so unrelated working-tree changes cannot contaminate evidence."
+      },
+      {
+        "id": "1.5",
+        "text": "Produces a Chinese findings-first verdict with exact file and line anchors plus validation limits."
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "name": "working-tree-review-includes-untracked-go-files",
+    "description": "Covers staged, unstaged, and untracked files when the user asks to review current local changes.",
+    "prompt": "Review the current Go working-tree changes. A new untracked handler file is part of the work and has not been git-added yet.",
+    "trap": "The reviewer runs only git diff HEAD and silently omits the untracked file.",
+    "assertions": [
+      {
+        "id": "2.1",
+        "text": "Includes staged and unstaged changes relative to HEAD."
+      },
+      {
+        "id": "2.2",
+        "text": "Enumerates untracked files with git ls-files --others --exclude-standard and includes their content in scope."
+      },
+      {
+        "id": "2.3",
+        "text": "States the exact working-tree scope instead of presenting it as a committed branch or MR diff."
+      },
+      {
+        "id": "2.4",
+        "text": "Does not git add the untracked file merely to make diff tooling see it."
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "name": "go-version-aware-range-loop-review",
+    "description": "Avoids reporting a pre-Go-1.22 range-variable warning when the module targets a newer language version.",
+    "prompt": "Review this diff in a module whose go.mod says `go 1.23`: `for _, item := range items { go func() { process(item) }() }`.",
+    "trap": "The reviewer mechanically reports the historical range-loop closure bug without checking the module's Go language version.",
+    "assertions": [
+      {
+        "id": "3.1",
+        "text": "Checks the go directive and any workspace/toolchain constraints before applying version-sensitive Go rules."
+      },
+      {
+        "id": "3.2",
+        "text": "Does not report the pre-Go-1.22 per-iteration range-variable capture bug for a Go 1.23 module."
+      },
+      {
+        "id": "3.3",
+        "text": "Still checks whether item points to shared mutable state or whether goroutine lifecycle and cancellation create a different concrete bug."
+      },
+      {
+        "id": "3.4",
+        "text": "Does not turn a non-issue into a style suggestion merely to produce output."
+      }
+    ]
+  },
+  {
+    "id": 4,
+    "name": "request-context-contract-loss",
+    "description": "Finds a concrete cross-layer context propagation regression and explains its trigger and impact.",
+    "prompt": "Review a Go HTTP-handler diff that replaces `s.store.Get(r.Context(), id)` with `ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second); defer cancel(); s.store.Get(ctx, id)`. The repository propagates tracing and tenant identity through request context.",
+    "trap": "The reviewer praises the timeout or raises only generic context style, missing that Background severs cancellation, trace, and tenant values.",
+    "assertions": [
+      {
+        "id": "4.1",
+        "text": "Reports that deriving from context.Background severs the request context contract."
+      },
+      {
+        "id": "4.2",
+        "text": "Names concrete impact: client cancellation no longer stops the store call and request-scoped trace or tenant values are lost."
+      },
+      {
+        "id": "4.3",
+        "text": "Suggests context.WithTimeout(r.Context(), ...) as the smallest fix."
+      },
+      {
+        "id": "4.4",
+        "text": "Anchors the finding to the changed source line and assigns severity and confidence from the demonstrated trigger path."
+      }
+    ]
+  },
+  {
+    "id": 5,
+    "name": "large-diff-grouping-without-unrequested-subagents",
+    "description": "Reviews a large cross-package change by functional groups while respecting an explicit no-subagent constraint.",
+    "prompt": "Review a 60-file Go branch diff spanning handler, service, repository, migrations, config, and Helm. Do not use subagents. Keep the review local and read-only.",
+    "trap": "The reviewer either starts subagents anyway, samples only a few files, or reviews each directory independently and misses changed cross-group contracts.",
+    "assertions": [
+      {
+        "id": "5.1",
+        "text": "Does not spawn or delegate to subagents."
+      },
+      {
+        "id": "5.2",
+        "text": "Groups files by behavior, call chain, or shared contract rather than arbitrary file-count chunks."
+      },
+      {
+        "id": "5.3",
+        "text": "Reviews every group sequentially and then performs a cross-group pass for API, interface, config, schema, generated-code, and deployment consistency."
+      },
+      {
+        "id": "5.4",
+        "text": "Records any coverage limitation instead of claiming whole-diff coverage without evidence."
+      }
+    ]
+  },
+  {
+    "id": 6,
+    "name": "inline-comment-publication-refreshes-and-verifies",
+    "description": "Publishes only explicitly authorized, current-patchset findings and verifies the remote result.",
+    "prompt": "The local report for Go MR !456 has two findings. I now explicitly authorize you to submit them as inline comments. The MR may have received a new patchset since the report was written.",
+    "trap": "The reviewer reuses stale commit IDs and line numbers, duplicates existing discussions, or claims success after draft creation without read-back.",
+    "assertions": [
+      {
+        "id": "6.1",
+        "text": "Refreshes MR metadata, current patchset, exact diff, and existing discussions before publishing."
+      },
+      {
+        "id": "6.2",
+        "text": "Revalidates each finding against current code and drops or rewrites resolved, outdated, duplicated, or moved findings."
+      },
+      {
+        "id": "6.3",
+        "text": "Publishes only confirmed findings on current changed lines, with short actionable Chinese wording."
+      },
+      {
+        "id": "6.4",
+        "text": "Reports publication success only after reading back comment IDs, positions, patchset or commit SHAs, and non-outdated thread state."
+      }
+    ]
+  },
+  {
+    "id": 7,
+    "name": "deep-review-separates-maintainability-from-defects",
+    "description": "Adds concrete simplification guidance without turning design preferences into merge-blocking findings.",
+    "prompt": "Do a deep Go code review of this MR, including architecture, maintainability, and simplification. The changed code adds a fourth copy of the same status mapping, but all current branches are behaviorally correct.",
+    "trap": "The reviewer calls duplication a P1/P2 bug, forces a nine-section template, recommends a design pattern without showing reduced complexity, or omits the requested maintainability assessment.",
+    "assertions": [
+      {
+        "id": "7.1",
+        "text": "Keeps the behaviorally correct duplication out of P0-P2 findings and the merge verdict."
+      },
+      {
+        "id": "7.2",
+        "text": "Reports a concrete non-blocking recommendation anchored to the repeated mapping and names its current change cost."
+      },
+      {
+        "id": "7.3",
+        "text": "Suggests the smallest behavior-preserving consolidation at the owning boundary instead of a broad rewrite."
+      },
+      {
+        "id": "7.4",
+        "text": "Omits empty architecture or design-pattern sections and does not introduce a named pattern unless it materially reduces concepts."
+      }
+    ]
+  },
+  {
+    "id": 8,
+    "name": "review-only-does-not-turn-into-rewrite",
+    "description": "Preserves the review-only boundary even when the code could be substantially simplified.",
+    "prompt": "Review this Go change only; do not modify files. The main function is long and mixes orchestration, mapping, and I/O. Tell me what must block merge and what could be simplified later.",
+    "trap": "The reviewer edits files, emits a wholesale replacement implementation, or mixes optional restructuring into the blocking defect list.",
+    "assertions": [
+      {
+        "id": "8.1",
+        "text": "Does not edit files or treat a review request as authorization to apply a refactor."
+      },
+      {
+        "id": "8.2",
+        "text": "Uses the normal finding gate for merge blockers and keeps optional structural improvements in a separate non-blocking section."
+      },
+      {
+        "id": "8.3",
+        "text": "Anchors simplification advice to concrete responsibilities or change risks and proposes staged, behavior-preserving steps."
+      },
+      {
+        "id": "8.4",
+        "text": "Provides only concise fix directions unless the user separately asks to see code or apply changes."
+      }
+    ]
+  }
+]

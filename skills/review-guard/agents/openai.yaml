@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Guard"
+  short_description: "精确范围、只读、证据优先的 Go 代码评审"
+  default_prompt: "Use $review-guard to review the exact Go change set and return a concise Chinese verdict with evidence-backed findings."

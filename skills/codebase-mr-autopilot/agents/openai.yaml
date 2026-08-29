@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codebase MR Autopilot"
+  short_description: "用严格两层 Agent 架构监听并安全合并 Codebase MR"
+  default_prompt: "使用 $codebase-mr-autopilot 和 $review-guard 持续跟进这个 Codebase Go MR；主 Agent 直接调度所有同级子 Agent，禁止嵌套派生，并用简体中文汇报全过程。"

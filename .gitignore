@@ -1,0 +1,17 @@
+.DS_Store
+.idea/
+.vscode/
+
+__pycache__/
+*.py[cod]
+
+.env
+.env.*
+!.env.example
+*.log
+
+.tmp/
+tmp/
+
+# Runtime state and private authorization never belong in this repository.
+.codebase-mr-autopilot/
