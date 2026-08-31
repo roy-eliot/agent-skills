@@ -10,7 +10,8 @@
 主控 -> review_r1：通过 review-guard 执行全新的只读完整 MR 评审
 主控 -> fix_batch：重新读取评论、合并/去重、分类、修复/驳回，
                     执行一次补充扫描、冻结 cutoff、验证，
-                    并构建 R2 影响闭包和规范证据
+                    末尾强制 fetch+rebase 到最新 target，
+                    再构建 R2 影响闭包和规范证据
 主控 -> review_r2：通过 review-guard 全新只读评审修复影响范围，
                     命中回退条件时评审完整预期最终版本
 主控 -> final_fix：可选的第二次、也是最后一次修复，并构建 R3 证据
@@ -104,7 +105,7 @@ open 不代表尚未修复。Reviewer 是否关闭线程与 Agent 是否完成�
 
 ## R1 Reviewer 契约
 
-R1 在 `intake_sync` 初始 rebase 后、评论聚合完成前运行。其边界从明确 target SHA 到完成 rebase 的精确私有 worktree head。由于这个预期 head 可能尚未成为远端 MR patchset，不要让 `review-guard` 根据 MR URL 推断 ref；应使用明确 base/head 范围调用，单独记录观测到的远端 patchset，并且只有这些本地 SHA 和 diff hash 保持不变时才能应用结果。R1 是发现型评审，但不是全仓审计或可维护性评审。
+R1 在 `intake_sync` 初始 rebase 后、评论聚合完成前运行。其边界从明确 target SHA 到完成 rebase 的精确私有 worktree head。由于这个预期 head 可能尚未成为远端 MR patchset，不要让 `review-guard` 根据 MR URL 推断 ref；应使用明确 base/head 范围调用，单独记录观测到的远端 patchset，并且只有这些本地 SHA 和 diff hash 保持不变时才能应用结果。R1 是发现型评审，但不是全仓审计或可维护性评审。派发 R1 前先按 [execution-core.md](execution-core.md) 的评审结论复用检查缓存：`source_head`、`review_guard_digest` 和 `prospective_patch_sha256` 三者未变且期间没有实质 target churn 时，复用上一轮 R1 发现集，不重复执行完整评审。
 
 ## R2 影响闭包、全量回退与 R3 覆盖
 
@@ -144,7 +145,7 @@ R1 完成后，再次获取 open 评论。按文件、符号/区域和事实主�
 - 多个 Codebase 线程是同一问题：只修复一次，但在每个线程分别回复。
 - 仅内部发现且被 `review-guard` 接受的 P0-P2 问题：范围内应修复；不要新建会触发监听器自身的 MR 评论。
 
-所有已接受的 P0-P2 问题都进入统一问题集，因为本 Autopilot 已被明确要求修复评审发现的问题。如果即使最小 P2 修复也需要实质重新设计或扩展范围，将其分类为 `unclear` 并阻塞等待指示，不得忽略问题或擅自扩大 MR。
+所有已接受的 P0-P2 问题都进入统一问题集，因为本 Autopilot 已被明确要求修复评审发现的问题。如果即使最小 P2 修复也需要实质重新设计或扩展范围，将其分类为 `unclear`、发布澄清回复并阻止合并，不得忽略问题或擅自扩大 MR；这不构成 MR 级终止。
 
 ## 事实处理结论
 
@@ -155,7 +156,7 @@ R1 完成后，再次获取 open 评论。按文件、符号/区域和事实主�
 - `partially_confirmed`：只有明确子集事实成立；修复该子集，并解释被驳回部分。
 - `false_positive`：主张与当前代码/行为/测试证据冲突；用证据驳回。
 - `duplicate`：本批次其他项已覆盖；关联到同一个修复 commit。
-- `unclear`：不同理解会实质改变实现；提出澄清问题并阻止合并，不得猜测。
+- `unclear`：不同理解会实质改变实现；提出澄清问题并阻止合并，不得猜测。该线程记为 `needs_clarification` 并正常发布澄清回复，本批次其余线程照常修复和回复；批次以 `waiting` 结束，`loop` 继续监听 Reviewer 回答。只有整批零可处理项且连澄清回复都无法发布时，才使用 `blocked_ambiguous_feedback`。
 
 ## 判断 open 评论是否已修复
 
@@ -180,9 +181,29 @@ R1 完成后，再次获取 open 评论。按文件、符号/区域和事实主�
 
 补充评论产生的变更纳入 R2。
 
+### 修复末尾的强制 rebase
+
+冻结 cutoff 之后、构建 R2 证据之前，`fix_batch` 必须执行一次强制 fetch + rebase，把批次绑定到当时最新的 target：
+
+```text
+git fetch <target-remote> +refs/heads/<target-branch>:refs/codebase-mr-autopilot/<mr-key>/target
+git rebase --autostash refs/codebase-mr-autopilot/<mr-key>/target
+```
+
+这样 R2/R3 评审的就是最接近提交形态的版本，`commit_reply` 的提交门禁 rebase 大概率成为 no-op。规则：
+
+- rebase 后把 `target_bound` 置为本次 fetch 得到的 target SHA，R2 证据全部基于 rebase 后的 worktree 重建。
+- 这次 rebase **不消耗**评审轮次或重绑定配额——它发生在 R2 绑定之前，还没有绑定可作废。
+- 冲突按 `blocked_rebase_conflict` 处理，不得猜测解决。
+- rebase 改变了任何已修复文件的内容时，重新运行受影响验证，不得沿用 rebase 前的结果。
+
+`commit_reply` 仍保留强制提交门禁 rebase，仍按三级判据处理 target 前进；只是命中实质 churn 的窗口从整个 R2+R3 期间缩短为 R2 之后。
+
 ## 有界收敛
 
-主控持有并持久化每批次的固定预算。每个同级步骤只能消耗分配给自己的轮次/修复次数：
+主控持有并持久化每批次的两个**相互独立**的预算。每个同级步骤只能消耗分配给自己的额度：
+
+**评审预算 `review_budget`（3 轮）——只服务于收敛修复质量**
 
 | 轮次 | 范围 | 是否可触发修复？ |
 |---|---|---|
@@ -190,16 +211,20 @@ R1 完成后，再次获取 open 评论。按文件、符号/区域和事实主�
 | R2 | 默认评审修复影响闭包；命中回退条件时评审完整预期最终 MR | 是，一次最终修复 |
 | R3 | 由全新 `review-guard` 定向验证 R2 问题和最后修复 delta | 不再触发自动修复/评审循环 |
 
+**重绑定配额 `rebind_budget`（默认 2 次）——只服务于 target 前进后的重新绑定**
+
+重绑定评审复用 `review_r2`/`review_r3` 步骤类型，但计入 `rebind_passes`，不消耗 `review_budget`；它同样不得触发新一轮自动修复。两个预算绝不能互相借用或互相抵扣。
+
 规则：
 
-- 最多三次评审调用和两次自动修复。
+- 最多三次收敛评审调用和两次自动修复；重绑定另计，最多两次。
 - 每轮都使用不同的全新直接子级评审步骤，以及同一个已绑定 `review-guard` package digest。
-- 如果 R1 除误报/已修复评论外没有发现问题，且代码未变化，跳过 R2/R3。
+- 如果 R1 除误报/已修复评论外没有发现问题，且代码未变化，跳过 R2/R3，由 `fix_batch` 直接迁移到 `commit_reply`。
 - 同一 fingerprint 在修复尝试后仍存在时立即阻塞；不得重复同一变更。
 - 如果 R3 返回任何未解决/新增、置信度至少 7/10 的 P0-P2 问题，不得提交已知有问题的工作。记录 `blocked_review_nonconvergent`。
-- target head 变化会使评审绑定失效。只能在剩余预算内 rebase 并重新评审。`commit_reply` 步骤把最早未使用的 `review_r2` 或 `review_r3` 返回给主控；它绝不自行创建评审步骤。该轮改为对完成 rebase 后的预期最终 diff 做完整重新绑定评审。即使只剩 R3，也仍不能触发另一轮自动修复。
-- 如果最后一个有效评审槽位后 target 再次移动，保留已知批次 diff 并记录 `blocked_target_churn`；不得提交，也不得静默重启无限评审预算。
-- 上述任一阻塞发生且存在未提交变更时，严格按 [contracts-and-state.md](contracts-and-state.md) 隔离 checkout：在 run 产物中捕获 patch/status，持久化 `dirty_quarantined:<run-id>`，并要求人工明确恢复。绝不能用 stash/reset 隐藏状态，也不能把脏 checkout 交给其他自动 Worker。
+- target head 变化**不必然**使评审绑定失效。先按 [git-ci-and-merge.md](git-ci-and-merge.md) 的三级判据计算 `overlap`：空交集只重跑受影响验证并推进 `target_bound`，不消耗任何额度；非空交集才消耗一次重绑定配额。`commit_reply` 步骤把最早未使用的 `review_r2` 或 `review_r3` 返回给主控；它绝不自行创建评审步骤。
+- `rebind_budget` 耗尽后 target 再次实质移动：保留已知批次 diff，记录 `blocked_target_churn`。`review_budget` 耗尽而问题仍未收敛：记录 `blocked_review_nonconvergent`。绝不能把两者混用，也不得静默重启任一预算。
+- 上述任一阻塞发生且未提交变更**可由本 run 完整解释**时，按 [contracts-and-state.md](contracts-and-state.md) 写出批次交接产物并持久化 `dirty_owned:<run-id>`，交由下一个 Cycle Run 续做。只有变更无法解释时才持久化 `dirty_quarantined:<run-id>` 并要求人工恢复。两种情况都绝不能用 stash/reset 隐藏状态。
 
 把每个评审结果绑定到：
 

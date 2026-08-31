@@ -24,7 +24,7 @@ MR：<exact URL>
 
 Claude 子 session 要求 slash-skill 语法时，使用 `/codebase-mr-autopilot`；评审步骤自行调用 `/review-guard`，但仍不得继续委派。
 
-Worker 开始前必须验证 `run_id`、`step_id`、持久化 `active_step`（`intake_probe` 使用 `active_probe`）、每个输入 path/digest、专用 worktree 绑定和本阶段授权。除只读 `intake_probe` 外，还必须验证当前 Cycle Run lease；`intake_probe` 改为验证 invocation/scheduler 绑定，且不得创建或修改 lease。Worker 只能写自己的步骤目录和已声明输出。评审步骤对仓库、状态和 lease 完全只读。
+Worker 开始前必须验证 `run_id`、`step_id`、持久化 `active_step`、每个输入 path/digest、专用 worktree 绑定和本阶段授权。还必须验证当前 Cycle Run lease。Worker 只能写自己的步骤目录和已声明输出。评审步骤对仓库、状态和 lease 完全只读。
 
 ## 副作用与幂等
 
@@ -63,7 +63,7 @@ Worker 开始前必须验证 `run_id`、`step_id`、持久化 `active_step`（`i
 }
 ```
 
-结果必须先写入 `result_path` 的同级临时文件，再原子 rename；向主 Agent 返回的对象必须与持久化文件逐字节一致。每个输出产物必须记录 role/path/hash，且路径位于本 run 或允许的外部评审目录。
+结果必须先写入 `result_path` 的同级临时文件，再原子 rename；向主 Agent 返回的对象必须与持久化文件逐字节一致。每个输出产物必须记录 role/path/hash，且路径位于本 run 或允许的外部评审目录。返回前用 `scripts/check-envelope.py <result_path>` 自检；不通过不得返回。
 
 每个非 idle 结果和每个阻塞都必须提供简体中文 `summary_zh` 与 `next_action_zh`，不得包含原始推理、完整评论正文或大段日志。内部 JSON key、enum、命令、SHA、路径和代码符号保留原值。
 
@@ -71,7 +71,6 @@ Worker 开始前必须验证 `run_id`、`step_id`、持久化 `active_step`（`i
 
 ## 阶段引用
 
-- `intake_probe`：只执行主 Agent 输入产物中给出的最小 probe schema 与 deterministic projection；不获取 write lease，不读取评论正文，不加载其他 reference，并把规范 probe/fingerprint 写入输出产物。
 - `intake_sync`、`review_r1`、`fix_batch`、`review_r2`、`final_fix`、`review_r3`、`commit_reply`：读取 [comments-and-review.md](comments-and-review.md)；涉及 Git/推送时再读取 [git-ci-and-merge.md](git-ci-and-merge.md)。
 - `ci_diagnose_fix`、`merge_gate`：读取 [git-ci-and-merge.md](git-ci-and-merge.md)。
 - R1/R2/R3：还必须按 [review-guard-compatibility.md](review-guard-compatibility.md) 验证绑定，并自主调用精确 `review-guard`。

@@ -28,7 +28,7 @@ git rebase refs/codebase-mr-autopilot/<mr-key>/target
 
 批次修复完成后，只 stage 明确属于该批次的路径，包括所有新测试文件，并检查 staged diff。如果仍有无关/无法解释的 untracked 文件，应阻塞，而不是假设 autostash 会保护它们。
 
-每次 commit 前立即再次 fetch，并始终运行：
+`fix_batch` 在冻结 cutoff 后、构建 R2 证据前，先执行一次强制 fetch+rebase 把批次绑定到最新 target（见 [comments-and-review.md](comments-and-review.md)）。此后每次 commit 前立即再次 fetch，并始终运行：
 
 ```text
 git fetch <target-remote> \
@@ -39,8 +39,27 @@ git rebase --autostash refs/codebase-mr-autopilot/<mr-key>/target
 只有预期批次路径均已 stage 且完成核对后，才能使用 `--autostash`。把 fetch 得到的 target head 与最近一次有效评审绑定的 head 比较。rebase 后，在测试或 commit 前验证预期 staged 变更已恢复。
 
 - target 未变化：所需提交前 rebase 应为 no-op。只有 [execution-core.md](execution-core.md) 的 no-op 复用条件全部成立时，才复用已绑定验证；否则重新运行受影响验证。
-- target 已前进：rebase 会使旧评审绑定失效。直接 `commit_reply` 步骤重新运行受影响验证、计算新的 worktree diff hash、写入重新绑定请求产物，并把最早未使用的 `review_r2` 或 `review_r3` 返回给主控。主控直接派发该评审步骤。如果没有足够的评审槽位，保留已知批次 diff，不提交，并返回 `blocked_target_churn`。
+- target 已前进：按下面的三级判据决定是否作废评审绑定。不得一律作废。
 - 发生冲突：检查冲突。只有意图无歧义且能完整测试时才解决；否则 abort rebase、保存证据，并返回 `blocked_rebase_conflict`。
+
+### target 前进的三级判据
+
+`target_bound`（最近一次有效评审绑定的 target SHA）与 fetch 得到的 `target_fetched` 不同时，`commit_reply` 必须先计算，不得直接作废评审：
+
+```text
+churn_delta = diff(target_bound, target_fetched) 的路径与符号集合
+overlap     = churn_delta ∩ 本批次影响闭包（修改路径 + 直接契约路径 + 测试路径）
+```
+
+| 情况 | 处理 |
+|---|---|
+| `overlap` 为空，且 rebase 无冲突，且 rebase 后 prospective patch digest 未变 | **不消耗任何评审轮次或重绑定配额**。重跑受影响验证，把 `target_bound` 推进到 `target_fetched`，继续提交 |
+| `overlap` 非空，或 rebase 有冲突 | 消耗一次重绑定配额，返回最早未使用的 `review_r2` 或 `review_r3` 给主控重新绑定评审 |
+| 无法证明 `churn_delta`（target 被 force push、无共同祖先、影响闭包不完整或 digest 缺失） | 保守按“`overlap` 非空”处理 |
+
+空交集路径必须把 `churn_delta` 路径清单、影响闭包路径清单、交集为空的证明、`target_bound` 的新旧值和重跑的验证命令写入 validation manifest。缺少其中任何一项就不得走空交集路径。
+
+重绑定配额与评审预算相互独立，见 [comments-and-review.md](comments-and-review.md) 的有界收敛。配额耗尽时保留已知批次 diff、不提交，按 [contracts-and-state.md](contracts-and-state.md) 写出批次交接产物并返回 `blocked_target_churn`。
 
 已知 source 分支落后于 target 分支时，绝不能 commit。
 

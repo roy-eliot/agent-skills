@@ -1,6 +1,6 @@
 # 共享执行核心
 
-`once` 与 `loop` 共用同一个有界 `Cycle Run`。模式只决定 Cycle Run 运行一次还是由原生 scheduler 重复唤醒；评论、评审、修复、CI、rebase 和合并语义不得分叉。
+`once` 与 `loop` 共用同一个有界 `Cycle Run`。模式只决定 Cycle Run 运行一次还是由原生 scheduler 重复唤醒；评论、评审、修复、CI、rebase 和合并语义不得分叉。运行时与 scheduler 细节见 [supervisor-and-runtimes.md](supervisor-and-runtimes.md)，持久化结构见 [contracts-and-state.md](contracts-and-state.md)。
 
 ## Cycle Run 边界
 
@@ -17,40 +17,21 @@ Cycle Run 不是一个中间父 Agent。它只是主 Agent 持有的状态和 le
 
 ## 轻量只读探针
 
-主 Agent 每次开始 Cycle Run 时，只读取足以判断“MR 外部状态是否变化”的机器字段。通过 `bytedcli --json` 和确定性的本地投影，把原始响应收敛为：
+主 Agent 每次开始 Cycle Run 时执行：
 
-```json
-{
-  "mr_state": "open|merged|closed",
-  "source_head": "sha",
-  "target_head": "sha",
-  "patchset": "id-or-null",
-  "reviewer_activity": {
-    "open_thread_count": 0,
-    "high_watermark": "stable-hash-of-thread-id-comment-id-updated-at-author"
-  },
-  "approval_fingerprint": "stable-hash",
-  "required_checks_fingerprint": "stable-hash",
-  "queue_fingerprint": "stable-hash"
-}
-```
-
-探针可以调用 `mr get`、`mr status`、`reviewer list`、open `comment list` 和 `queue entries`，但在结果进入主 Agent 上下文前必须剔除评论正文、diff、日志、描述和其他自由文本。主 Agent 只保留规范投影、组合 fingerprint、时间戳和命令是否成功；原始 JSON 不得出现在长期上下文或用户报告中。
-
-如果当前运行时无法保证机器输出先被确定性投影，再返回主 Agent，则派发一个最小的直接 `intake_probe` 叶子 Worker。该 Worker 只读取上述字段、不加载评审或 Git 参考、不获取写 lease，并返回同一探针对象。不得退回每次空闲 tick 都加载完整 Autopilot 上下文的旧路由 Worker。
-
-组合 fingerprint 至少绑定：
+`once` 且磁盘上没有 `last_probe_fingerprint`（首次处理该 MR）时**跳过探针**，直接进入 `intake_sync`：此时探针必然返回“有变化”，而 `intake_sync` 会重新读取完整 MR 状态，5 次 bytedcli 调用是纯浪费。其余情况（`loop` 的每次唤醒、`once` 的后续调用）都必须执行探针。
 
 ```text
-mr_state + source_head + target_head + patchset
-+ reviewer_activity.high_watermark
-+ approval_fingerprint + required_checks_fingerprint + queue_fingerprint
+scripts/probe.py <MR_URL> --raw-dir <state-root>/runs/<run-id>/probe --last <last_probe_fingerprint>
 ```
 
-- 与 `last_probe_fingerprint` 相同：不得创建业务 Worker。`loop` 静默等待下一次唤醒；`once` 返回“当前状态无变化，无需处理”。
-- 首次运行、fingerprint 变化或上次运行未完成：进入完整 intake。
-- 仅时间戳变化而规范字段未变，不算变化。
-- 探针失败：执行一次有界重试；仍失败则返回中文阻塞/等待结果，不得把“读取失败”解释为“没有工作”。
+脚本调用 `bytedcli --json`，把原始响应只写入 `--raw-dir`，stdout 只输出规范 probe 对象和组合 `fingerprint`。原始 JSON 不得进入主 Agent 上下文或用户报告。fingerprint 绑定 `mr_state + source_head + target_head + patchset + reviewer_activity.high_watermark + approval_fingerprint + required_checks_fingerprint + queue_fingerprint`。
+
+退出码即路由：
+
+- `10`（与 `last_probe_fingerprint` 相同）：不得创建业务 Worker。`loop` 静默等待下一次唤醒；`once` 返回“当前状态无变化，无需处理”。
+- `0`：首次运行或 fingerprint 变化，进入完整 intake。上次运行未完成时同样进入 intake。
+- `2`：探针失败。执行一次有界重试；仍失败则返回中文阻塞/等待结果，不得把“读取失败”解释为“没有工作”。字段定位失败也走这条路径，绝不静默产出 fingerprint。
 
 轻量探针是主 Agent 唯一允许的 MR 读取。任何需要评论正文、diff、日志、具体审批人、失败详情或问题判断的读取，都必须交给直接 Worker。
 
@@ -68,18 +49,34 @@ intake_sync
   └── idle / waiting / queued / terminal
 ```
 
-`intake_sync` 把完整路由与初始 rebase 合并为一个阶段：它读取最新 MR 状态；存在符合处理条件的评论时同步 source/target 并在专用 worktree rebase，然后输出 R1 请求。这样每个活跃评论批次少创建一个 Worker，同时仍保证先 rebase、后 R1。
+`intake_sync` 把完整路由与初始 rebase 合并为一个阶段：它读取最新 MR 状态；存在符合处理条件的评论时同步 source/target 并在专用 worktree rebase，然后输出 R1 请求。这样每个活跃评论批次少创建一个 Worker，同时仍保证先 rebase、后 R1。完整 intake 的路由判定顺序见 [contracts-and-state.md](contracts-and-state.md)。
 
 存在工作时，主 Agent 根据 `continue_now=true` 在同一个 active turn 中继续派发下一同级 Worker，不等待 scheduler。只有到达 Cycle Run 边界才释放 lease。
 
-## 评审范围优化
+## 主 Agent 执行序列
+
+主 Agent 只执行以下序列：
+
+1. 读取 execution mode、持久化阶段、`active_step`/`step_handoff`、probe fingerprint 和 lease 元数据。
+2. 执行上述轻量探针。指纹不变且没有未完成 run 时，不获取 lease、不创建业务 Worker。
+3. 如果 MR 已是终止状态：持久化；`loop` 取消并验证精确 task，`once` 不接触 scheduler；输出一次中文报告。
+4. 如果另一 run 持有有效 lease，保持静默或输出一行中文等待信息，不派发。属于当前 `active_run_id` 时，只按持久化步骤恢复。
+5. 否则创建/恢复 `run_id`，获取 Cycle Run lease，持久化直接 Worker 的 `active_step`、输入产物、结果路径和有限 deadline，然后派发。
+6. 用 `scripts/check-envelope.py <result.json> --active-step <active_step.json>` 校验持久化结果：身份、输入/输出 hash、中文字段和迁移 allowlist。退出码 `4` 记为 `blocked_output_contract`，`5` 记为 `blocked_invalid_step_transition`。通过后原子持久化 `next_step`/`step_handoff`；只有 `continue_now=true` 才立即派发下一个同级 Worker。
+7. 串行推进直到 Cycle Run 边界，释放 lease，记录 invocation 结果。
+8. `once` 输出结果并退出；`loop` 在非终止结果后等待下一次原生唤醒。
+
+主 Agent 只持有运行模式、scheduler、轻量 probe、lease、phase、active Step 发布、紧凑交接、中文渲染和停止。它不读取详细问题、评论正文、diff 或日志，不执行 Git 操作，不判断/修改代码，不回复，不操作 CI，也不入队合并。
+
+会修改代码的 CI Worker 返回一个允许的后续评审阶段，由主 Agent 创建该评审 Worker；不得自行创建 Reviewer。
+
+## 评审范围
 
 - **R1：** 始终是完成初始 rebase 后的完整预期 MR 发现型评审，同时充当评论聚合窗口。
-- **R2：** 默认评审本轮修复 delta、被修改符号的直接调用/实现契约和相关测试；仍要绑定完整 prospective MR 的 target/source/worktree digest。
-- **R2 全量回退：** 发生下列任一条件时，改为完整预期 MR 评审：公共 API/接口、跨模块调用、并发/事务、鉴权/隔离、持久化/schema、IDL/生成物、配置/部署、依赖升级、文件移动/大量重命名；修复触碰 R1 范围外路径；R1 问题跨越多个行为组；target 变化；无法证明影响闭包；增量证据缺失或 hash 不匹配。
+- **R2：** 默认评审本轮修复 delta、被修改符号的直接调用/实现契约和相关测试；仍要绑定完整 prospective MR 的 target/source/worktree digest。命中回退条件时改为完整预期 MR 评审。
 - **R3：** 仅验证 R2 已接受 fingerprint、最后修复 delta 和受影响契约；不再触发第三次修复或第四次评审。
 
-增量 R2 不是只看几行 patch。`fix_batch` 必须生成影响闭包 manifest，包含修复前后完整 prospective patch digest、last-fix delta、修改路径/符号、直接契约路径、测试路径和选择增量/全量的理由。Reviewer 可随时根据证据把 R2 升级为全量，但不得把全量降级为更窄范围。
+增量 R2 不是只看几行 patch。`fix_batch` 必须生成影响闭包 manifest。回退条件清单、影响闭包构建步骤和 R3 覆盖证明由 [comments-and-review.md](comments-and-review.md) 定义，评审步骤以该文为准。Reviewer 可随时根据证据把 R2 升级为全量，但不得把全量降级为更窄范围。
 
 ## no-op rebase 的验证复用
 
@@ -92,6 +89,25 @@ intake_sync
 - 验证命令不是依赖实时网络、时间、外部服务或易变生成状态的检查；仓库规则未要求每次 commit 前强制重跑。
 
 把复用的每条命令、原结果、输入 digest 和复用理由写入 validation manifest。任一条件不成立、证据缺失或命令属性未知时，重新运行受影响验证。target 前进时旧评审和验证绑定均失效，按剩余预算 rebase、验证并重新评审。
+
+## 评审结论复用
+
+评审是全流程最贵的一步，输入完全一致时不得重复执行。缓存键：
+
+```text
+source_head + review_guard_digest + prospective_patch_sha256
+```
+
+同键的已完成评审结论可以复用，条件是全部成立：
+
+- 缓存记录来自同一个不可变范围（同一 MR、同一 worktree 绑定、同一 review-guard package digest）；
+- `source_head` 与 `prospective_patch_sha256` 与当前值逐一相等；
+- 自缓存以来的 target 变化全部通过 [git-ci-and-merge.md](git-ci-and-merge.md) 的空交集判据，即 `overlap` 始终为空；
+- 原生报告和证据产物仍存在且 hash 匹配。
+
+命中时跳过对应评审步骤，把缓存结论写入新的 review manifest，并记录 `reused_from`（原步骤 result 路径）、原 digest 三元组和复用理由；不消耗评审轮次。任一条件不成立、证据缺失或 target 出现实质 churn 时，重新执行评审。
+
+这条规则对 R1 收益最大：Reviewer 追加一条评论不会改变 `source_head`，此时上一轮的 R1 发现集可以整体复用，只需重跑评论分类与合并。
 
 ## 模式外壳
 

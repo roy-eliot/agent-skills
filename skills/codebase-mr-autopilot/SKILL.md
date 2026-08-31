@@ -22,7 +22,7 @@ description: 对用户明确指定的 Codebase Go MR 执行一次有界处理，
 - “持续监听”“一直跟进”“直到合并” -> `loop`
 - 仍有歧义 -> 默认 `once`，不得擅自创建长期循环
 
-循环间隔只属于 `loop`。用户未指定时默认 `1m`；用户指定时验证当前运行时支持的最小粒度和语法。存在工作时，在同一个 Cycle Run 中连续推进，不等待下一次间隔；只有 `idle`、外部 `waiting` 或 `queued` 后才等待下一次唤醒。
+循环间隔只属于 `loop`。用户未指定时默认 `5m`；用户指定时验证当前运行时支持的最小粒度和语法。存在工作时，在同一个 Cycle Run 中连续推进，不等待下一次间隔；只有 `idle`、外部 `waiting` 或 `queued` 后才等待下一次唤醒。
 
 两种模式必须读取 [execution-core.md](references/execution-core.md)。运行时选择、启动和停止读取 [supervisor-and-runtimes.md](references/supervisor-and-runtimes.md)。
 
@@ -31,6 +31,18 @@ description: 对用户明确指定的 Codebase Go MR 执行一次有界处理，
 - **启动/初始化：** 解析用户的明确调用和可选 owner policy，验证输入和精确兼容的 `review-guard`，然后自动创建专用 worktree。读取 [owner-policy-and-worktree.md](references/owner-policy-and-worktree.md)、[review-guard-compatibility.md](references/review-guard-compatibility.md)、[execution-core.md](references/execution-core.md)、[supervisor-and-runtimes.md](references/supervisor-and-runtimes.md) 和 [contracts-and-state.md](references/contracts-and-state.md)。
 - **主 Agent：** 只保留运行模式、轻量只读探针、Cycle Run lease、阶段编排、直接子级派发、紧凑结果校验、中文渲染和停止状态。读取 [execution-core.md](references/execution-core.md)、[supervisor-and-runtimes.md](references/supervisor-and-runtimes.md) 和 [contracts-and-state.md](references/contracts-and-state.md)。
 - **直接步骤 Worker：** 只执行一个已持久化阶段。读取 [step-worker-contract.md](references/step-worker-contract.md)，再按阶段读取 [comments-and-review.md](references/comments-and-review.md) 或 [git-ci-and-merge.md](references/git-ci-and-merge.md)。不要加载主控、scheduler、owner policy 或完整状态机文档。评审步骤必须显式调用 `review-guard`；非评审步骤不得自行替代评审。
+
+## 脚本
+
+确定性动作一律调用脚本，不得手工复现算法或凭记忆重算 hash：
+
+| 脚本 | 用途 | 失败退出码 |
+|---|---|---|
+| `scripts/probe.py <MR_URL>` | 轻量探针：bytedcli 原始响应只落盘，stdout 只给规范投影与 fingerprint | `2` 探针失败；`10` fingerprint 未变 |
+| `scripts/package-digest.py <root> --expect <digest>` | review-guard package digest | `3` 不匹配 |
+| `scripts/check-envelope.py <result.json> [--active-step <path>]` | 步骤结果信封、产物 hash、中文契约与迁移 allowlist | `4` 输出契约；`5` 非法迁移 |
+
+改动脚本后运行 `python3 scripts/selftest.py`。
 
 ## 启动必需输入
 
@@ -54,10 +66,10 @@ description: 对用户明确指定的 Codebase Go MR 执行一次有界处理，
 4. 不得使用 `watch.py`、cron、后台 watcher、Monitor 或外部工作流循环。`loop` 只能使用当前 Agent 运行时的原生固定间隔循环；`once` 没有循环。
 5. 绝不能 stash、reset、clean、switch、rebase 或以其他方式修改用户主 checkout。任何 MR 修改前，必须创建并绑定专用 worktree。
 6. 轻量探针发现符合条件的评论后，由 `intake_sync` Worker 先刷新完整状态并 rebase，再用 R1 全量评审作为评论聚合窗口；不额外固定等待三分钟。
-7. 批次提交前恰好再补充扫描一次评论。cutoff 后到达的评论留给下一次 Cycle Run。
-8. 每次提交前都要 rebase。若 target head 变化，在剩余评审预算内重新绑定评审；若 rebase 是可证明的 no-op，可复用输入完全一致的验证证据。
-9. 每次评审都由全新的直接评审 Worker 调用 `review-guard`。每批最多三次评审和两次自动修复；不得进行第四次评审或使用内部降级 Reviewer。
-10. R1 是完整 MR 发现型评审。R2 默认评审修复增量及受影响契约；命中跨模块、公共契约、数据/并发/鉴权、生成物或证据不完整等回退条件时，必须改为完整预期 MR 评审。R3 只做有界定向验证。
+7. 批次提交前恰好再补充扫描一次评论。cutoff 后到达的评论留给下一次 Cycle Run；单个 Cycle Run 最多处理一个评论批次和一个 CI 批次。
+8. 每次提交前都要 rebase。target 前进时按三级判据处理：与本批次影响闭包空交集且无冲突则只重跑受影响验证、不消耗任何额度；实质重叠才消耗独立的重绑定配额。rebase 是可证明的 no-op 时可复用输入完全一致的验证证据。
+9. 每次评审都由全新的直接评审 Worker 调用 `review-guard`。收敛预算每批最多三次评审和两次自动修复；target 重绑定另有最多两次的独立配额，两者绝不能互相抵扣。不得使用内部降级 Reviewer。
+10. R1 是完整 MR 发现型评审。R2 默认评审修复增量及受影响契约，命中 [comments-and-review.md](references/comments-and-review.md) 的回退条件时改为完整预期 MR 评审。R3 只做有界定向验证。
 11. 在每个相关 Codebase 线程中回复。绝不能 resolve 或关闭 Reviewer 评论；关闭权属于 Reviewer。
 12. 先诊断 CI，再执行操作。相同 `HEAD + check + failure fingerprint` 默认最多重试一次。
 13. 绝不能执行无保护 force push。只有 rebase 改写已授权 MR 分支时，才使用精确 `--force-with-lease=<branch>:<expected-sha>`。
@@ -79,7 +91,7 @@ description: 对用户明确指定的 Codebase Go MR 执行一次有界处理，
 - `blocked_review_dependency`
 - `blocked_review_incomplete`
 - `blocked_ci_nonconvergent`
-- `blocked_ambiguous_feedback`
+- `blocked_ambiguous_feedback`（仅整批零可处理项时；单条评论不明确只回复澄清并以 `waiting` 结束）
 - `blocked_nested_delegation`
 - `blocked_invalid_step_transition`
 - `blocked_output_contract`
