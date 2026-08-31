@@ -7,7 +7,7 @@
 当前 Autopilot 版本只接受以下 `review-guard` package digest：
 
 ```text
-1d303873c29259b242d023f7822a78c5be9c77558a6009e4d2a5cbbcc5374d72
+44f3cd935eda77bd9f03442a722862d1b8096582de300333e5f352951e9e455d
 ```
 
 所有 digest 一律用同一个脚本计算，不得手工复现算法：

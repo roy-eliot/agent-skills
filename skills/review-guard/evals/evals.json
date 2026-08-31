@@ -124,7 +124,7 @@
       },
       {
         "id": "5.4",
-        "text": "为每组分别记录四个独立视角、至少一个失败场景和候选结论，再执行跨组契约复核。"
+        "text": "为每组分别记录五个独立视角、至少一个失败场景和候选结论，再执行跨组契约复核。"
       },
       {
         "id": "5.5",
@@ -329,6 +329,181 @@
       {
         "id": "13.4",
         "text": "不制造 P2、样式意见或空泛建议来填充报告。"
+      }
+    ]
+  },
+  {
+    "id": 14,
+    "name": "finding-vocabulary-is-machine-checked",
+    "description": "问题清单必须通过机器校验，不得使用自造的严重级别或置信度词汇。",
+    "prompt": "评审完成，准备输出 15 条问题，其中 severity 写成 high/medium/low、confidence 写成 high/medium，且没有 trigger、impact、action 和行锚点。",
+    "trap": "直接把这份清单当成报告交出去；或只在文字上改成 P1，却仍然没有触发条件、影响、行锚点和去重。",
+    "assertions": [
+      {
+        "id": "14.1",
+        "text": "输出报告前运行 check-findings.py，退出码 4 时不得出报告。"
+      },
+      {
+        "id": "14.2",
+        "text": "severity 只用 P0/P1/P2，confidence 只用 1-10 整数，低于 7 的候选移入待确认风险而不是问题列表。"
+      },
+      {
+        "id": "14.3",
+        "text": "补齐 trigger/impact/evidence/action 与行锚点，并确认它们是简体中文。"
+      },
+      {
+        "id": "14.4",
+        "text": "按脚本计算的 fingerprint 去重，并遵守数量上限与 P0 全保留规则。"
+      }
+    ]
+  },
+  {
+    "id": 15,
+    "name": "stale-line-anchor-is-rejected",
+    "description": "行锚点必须在锁定 head 上真实存在，并落在变更行区间内。",
+    "prompt": "一条 P1 问题的锚点写的是上一个 patchset 的行号，该行号已超出当前文件长度；另一条锚点落在文件里未被本次变更触及的行。",
+    "trap": "凭旧报告或缓存行号出报告；或把既有代码的问题混进来却不说明它为何被本次变更暴露。",
+    "assertions": [
+      {
+        "id": "15.1",
+        "text": "用 --repo-root/--head 校验锚点文件存在且行号不超出文件长度。"
+      },
+      {
+        "id": "15.2",
+        "text": "用 --change-map 校验锚点落在该文件的 hunk 行区间内。"
+      },
+      {
+        "id": "15.3",
+        "text": "确属被本次变更暴露的既有代码时，在 evidence 中说明暴露路径，而不是删掉行号。"
+      },
+      {
+        "id": "15.4",
+        "text": "不得复用过期行号或上一个 patchset 的位置。"
+      }
+    ]
+  },
+  {
+    "id": 16,
+    "name": "change-map-replaces-exploratory-grep",
+    "description": "变更地图由脚本一次给出，不用探索性 grep 重新发现。",
+    "prompt": "一个 22 文件的 Go MR，其中一个导出函数的参数被删除，一个 struct 字段的 json tag 大小写变了，一个测试函数被删除。仓库是多 module，根目录没有 go.mod。",
+    "trap": "逐个文件读 diff 再手动 grep 调用方，耗时远超脚本；或在根目录找不到 go.mod 就跳过版本判定，进而给出该 module 的 Go 版本不支持的建议。",
+    "assertions": [
+      {
+        "id": "16.1",
+        "text": "先运行 change-map.py 得到签名变化、tag 变化、被删测试、跨包引用和每个 module 的 Go 版本。"
+      },
+      {
+        "id": "16.2",
+        "text": "把签名变化的导出符号的跨包引用作为兼容性视角的起点，而不是重新 grep。"
+      },
+      {
+        "id": "16.3",
+        "text": "json tag 大小写变化作为 wire 契约候选进入发现阶段。"
+      },
+      {
+        "id": "16.4",
+        "text": "把脚本输出当作线索而非结论：据此提出的候选仍回源码证实，同名符号需排除。"
+      }
+    ]
+  },
+  {
+    "id": 17,
+    "name": "mechanical-na-skips-only-provable-lenses",
+    "description": "机械 N/A 只免除可证明不适用的视角，不得用来跳过有导出符号或共享契约的组。",
+    "prompt": "变更集包含两组：一组只改 docs/ 下的 Markdown；另一组只改一个未导出的纯映射函数，但该函数被同包的导出函数调用，且 change-map 显示存在跨 package 引用。",
+    "trap": "对第二组也套用 N/A 跳过 Compatibility-Ops；或反过来对纯文档组仍逐视角写一遍推理。",
+    "assertions": [
+      {
+        "id": "17.1",
+        "text": "纯文档组直接判 Correctness 与 Tests 为 N/A 并记一句理由。"
+      },
+      {
+        "id": "17.2",
+        "text": "第二组存在跨 package 引用，Compatibility-Ops 必须展开，不得 N/A。"
+      },
+      {
+        "id": "17.3",
+        "text": "N/A 判定依据必须来自 change-map.json 的事实，而不是印象。"
+      },
+      {
+        "id": "17.4",
+        "text": "N/A 只免除推理，仍要在覆盖记录中留痕。"
+      }
+    ]
+  },
+  {
+    "id": 18,
+    "name": "security-lens-catches-partial-authorization",
+    "description": "安全视角独立展开，复合标识的每个分量都必须鉴权。",
+    "prompt": "变更新增了 artifact version 引用：服务端把调用方传入的 RefID 对 session namespace 做了鉴权，但同一请求里调用方可控的 VersionID 未经校验就直传下游存储。兼容性视角看不出问题，旧调用方一切正常。",
+    "trap": "把这条塞进 Compatibility-Ops 一笔带过；或因为影响面看起来小就标成 P2；或认为 RefID 已鉴权即代表整个请求已鉴权。",
+    "assertions": [
+      {
+        "id": "18.1",
+        "text": "Security-Abuse 作为独立视角展开，沿身份 -> 校验 -> 决策 -> 资源 -> 副作用逐段追踪。"
+      },
+      {
+        "id": "18.2",
+        "text": "识别出复合标识中 VersionID 这一分量绕过了鉴权，而不是只看已鉴权的 RefID。"
+      },
+      {
+        "id": "18.3",
+        "text": "区分校验存在性与校验所有权：能读到该 version 不等于调用方有权读。"
+      },
+      {
+        "id": "18.4",
+        "text": "外部调用方可直接触发的越权至少定为 P1，不得降为 P2。"
+      }
+    ]
+  },
+  {
+    "id": 19,
+    "name": "signal-triggered-counterexamples-are-mandatory",
+    "description": "change-map 命中信号时必须展开对应的二级反例，不能用一个失败场景交差。",
+    "prompt": "change-map 显示：一个导出函数签名变化且跨 package 引用、一个 json tag 大小写改变、两个测试函数被删除、变更触及 deployments/。评审已经为主变更组追踪过一个失败场景。",
+    "trap": "以已完成一个失败场景为由跳过二级反例；或只挑最容易的一条展开，其余不记录。",
+    "assertions": [
+      {
+        "id": "19.1",
+        "text": "按信号逐项展开：跨包签名变化、tag 大小写在生产方/消费方/白名单间的一致性、被删测试原本证明的契约、部署配置的启动与就绪时序。"
+      },
+      {
+        "id": "19.2",
+        "text": "命中多个信号时全部展开，不得二选一。"
+      },
+      {
+        "id": "19.3",
+        "text": "在当前范围内不可达的反例要写明为什么不可达，而不是省略。"
+      },
+      {
+        "id": "19.4",
+        "text": "二级反例是覆盖要求，不产生问题时也要留下追踪记录。"
+      }
+    ]
+  },
+  {
+    "id": 20,
+    "name": "falsification-round-overturns-weak-candidate",
+    "description": "小变更的证伪轮以推翻已确认候选为目标，不是再确认一遍。",
+    "prompt": "一个 3 文件的变更，主链评审与反例复核后有 4 条 confirmed 候选，其中一条的理由是某参数可能为 nil。",
+    "trap": "第三轮先读前两轮结论再逐条点头；或跳过证伪轮直接出报告；或明知所有调用方都已保证前置条件仍按 P1 上报。",
+    "assertions": [
+      {
+        "id": "20.1",
+        "text": "证伪轮独立进行，不以前两轮结论为起点。"
+      },
+      {
+        "id": "20.2",
+        "text": "逐条寻找能让候选不成立的证据：调用方前置条件、保护机制、版本语义、已有测试、当前 patchset 已修复部分。"
+      },
+      {
+        "id": "20.3",
+        "text": "所有当前调用方都能证明前置条件时，该候选转 rejected 并记一句淘汰理由，或降为更低严重级别的防御性关注点。"
+      },
+      {
+        "id": "20.4",
+        "text": "证伪轮不得用来新增未经发现阶段的问题。"
       }
     ]
   }
