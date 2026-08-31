@@ -176,6 +176,81 @@ def signals(repo, files, head):
     return {k: sorted(set(v)) for k, v in out.items() if v}
 
 
+DOC_EXT = (".md", ".markdown", ".rst", ".txt", ".adoc")
+CODE_SPAN = re.compile(r'`([^`\n]{2,80})`')
+MD_LINK = re.compile(r'\[[^\]]*\]\(([^)\s#]+)')
+IDENT = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*(?:\(\))?$')
+ENVVAR = re.compile(r'^[A-Z][A-Z0-9_]{3,}$')
+FENCE_LANG = re.compile(r'^```([A-Za-z0-9_+-]+)\s*$')
+SECRETISH = re.compile(
+    r'(?i)(?:api[_-]?key|secret|passwd|password|token|bearer|private[_-]key)'
+    r'\s*[:=]\s*[\x27"]?([A-Za-z0-9/+_.-]{16,})')
+
+
+def is_doc(path):
+    return path.lower().endswith(DOC_EXT) or "/docs/" in f"/{path}" or path.startswith("docs/")
+
+
+def doc_references(repo, files, head):
+    """从变更的文档行里提取可机械核对的事实：引用的路径、标识符、环境变量、
+    代码块语言和疑似明文凭据。文档评审据此核对与代码是否一致。"""
+    paths, idents, envs, fences, secrets = {}, {}, {}, {}, []
+    for path, d in files.items():
+        if not is_doc(path):
+            continue
+        for raw in d["added"]:
+            m = FENCE_LANG.match(raw.strip())
+            if m:
+                fences.setdefault(m.group(1).lower(), []).append(path)
+                continue
+            if SECRETISH.search(raw):
+                secrets.append({"file": path, "line": raw.strip()[:120]})
+            for link in MD_LINK.findall(raw):
+                if not link.startswith(("http", "mailto", "#")):
+                    paths.setdefault(link, []).append(path)
+            for span in CODE_SPAN.findall(raw):
+                tok = span.strip()
+                if "/" in tok and "." in tok.rsplit("/", 1)[-1] and " " not in tok:
+                    paths.setdefault(tok, []).append(path)
+                elif ENVVAR.match(tok):
+                    envs.setdefault(tok, []).append(path)
+                elif IDENT.match(tok) and not tok.islower():
+                    idents.setdefault(tok.rstrip("()").split(".")[-1], []).append(path)
+
+    def exists(rel):
+        base = rel.split("#")[0]
+        if head:
+            return subprocess.run(["git", "-C", repo, "cat-file", "-e", f"{head}:{base}"],
+                                  capture_output=True).returncode == 0
+        return os.path.exists(os.path.join(repo, base))
+
+    missing_paths = sorted({p for p in paths if not exists(p)})
+
+    # 只在文档之外搜索：某个名字只出现在文档里，正是"文档说的东西代码里没有"
+    doc_globs = []
+    for ext in DOC_EXT:
+        doc_globs += ["-g", f"!*{ext}"]
+
+    def only_in_docs(name):
+        hit = subprocess.run(["rg", "-l", "-w", *doc_globs, "--", name, "."],
+                             cwd=repo, capture_output=True, text=True, check=False).stdout
+        return not hit.strip()
+
+    unresolved = [n for n in sorted(idents)[:MAX_SYMBOLS_TO_TRACE] if only_in_docs(n)]
+    unresolved_envs = [n for n in sorted(envs)[:MAX_SYMBOLS_TO_TRACE] if only_in_docs(n)]
+
+    return {
+        "referenced_paths": {k: sorted(set(v)) for k, v in sorted(paths.items())},
+        "missing_paths": missing_paths,
+        "referenced_identifiers": {k: sorted(set(v)) for k, v in sorted(idents.items())},
+        "identifiers_not_found_in_code": unresolved,
+        "referenced_env_vars": {k: sorted(set(v)) for k, v in sorted(envs.items())},
+        "env_vars_not_found_in_code": unresolved_envs,
+        "code_fence_languages": {k: sorted(set(v)) for k, v in sorted(fences.items())},
+        "possible_plaintext_secrets": secrets,
+    }
+
+
 def _read(path):
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
@@ -283,6 +358,8 @@ def main(argv):
         "references": refs,
         "references_truncated": truncated,
         "signals": signals(repo, changed, head),
+        "docs_only": bool(changed) and all(is_doc(p) for p in changed),
+        "doc_references": doc_references(repo, files, head) if any(is_doc(p) for p in changed) else None,
     }
     text_out = json.dumps(result, ensure_ascii=False, indent=2)
     if args["out"]:

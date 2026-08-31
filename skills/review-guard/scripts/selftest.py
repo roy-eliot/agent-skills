@@ -100,6 +100,61 @@ def test_change_map():
             assert "仓库之外" in str(exc)
 
 
+def test_docs_only_and_doc_references():
+    cm = load("change-map")
+    with tempfile.TemporaryDirectory() as work, tempfile.TemporaryDirectory() as d:
+        make_repo(d)
+        write(d, "pkg/a.go", "package pkg\n\nfunc RealSymbol() {}\n")
+        write(d, "docs/guide.md", "# guide\n")
+        git(d, "add", "-A")
+        git(d, "commit", "-qm", "base")
+
+        write(d, "docs/guide.md",
+              "# guide\n\n"
+              "调用 `RealSymbol` 即可，详见 [代码](pkg/a.go)。\n"
+              "也可以用 `GhostSymbol`，见 [说明](docs/gone.md)。\n"
+              "设置 `REAL_ENV_VAR` 和 `PHANTOM_ENV_VAR`。\n"
+              "api_key = sk_live_0123456789abcdefghij\n"
+              "```bash\nkubectl delete pod --all\n```\n")
+        write(d, "pkg/a.go", "package pkg\n\nfunc RealSymbol() {}\n\n"
+                             "// REAL_ENV_VAR is read at startup\n")
+        git(d, "add", "-A")
+        git(d, "commit", "-qm", "docs+code")
+
+        out = os.path.join(work, "mixed.json")
+        cm.main(["--repo-root", d, "--base", "HEAD~1", "--head", "HEAD", "--output", out])
+        m = json.load(open(out))
+        assert m["docs_only"] is False, "混合变更集不得判为 docs_only"
+        r = m["doc_references"]
+        assert "GhostSymbol" in r["identifiers_not_found_in_code"]
+        assert "RealSymbol" not in r["identifiers_not_found_in_code"]
+        assert "PHANTOM_ENV_VAR" in r["env_vars_not_found_in_code"]
+        assert "REAL_ENV_VAR" not in r["env_vars_not_found_in_code"]
+        assert "docs/gone.md" in r["missing_paths"]
+        assert "pkg/a.go" not in r["missing_paths"]
+        assert r["possible_plaintext_secrets"], "明文凭据必须被标出"
+        assert "bash" in r["code_fence_languages"]
+
+        # 纯文档变更
+        write(d, "docs/guide.md", "# guide\n\n只改措辞。\n")
+        git(d, "add", "-A")
+        git(d, "commit", "-qm", "docs only")
+        out2 = os.path.join(work, "docs.json")
+        cm.main(["--repo-root", d, "--base", "HEAD~1", "--head", "HEAD", "--output", out2])
+        m2 = json.load(open(out2))
+        assert m2["docs_only"] is True
+        assert m2["doc_references"] is not None
+
+        # 纯代码变更不产出 doc_references
+        write(d, "pkg/a.go", "package pkg\n\nfunc RealSymbol(x int) {}\n")
+        git(d, "add", "-A")
+        git(d, "commit", "-qm", "code only")
+        out3 = os.path.join(work, "code.json")
+        cm.main(["--repo-root", d, "--base", "HEAD~1", "--head", "HEAD", "--output", out3])
+        m3 = json.load(open(out3))
+        assert m3["docs_only"] is False and m3["doc_references"] is None
+
+
 def _f(**over):
     f = {"severity": "P1", "confidence": 9, "file": "pkg/a.go", "line_start": 3,
          "trigger": "调用方传入空切片时", "impact": "会返回错误结果",

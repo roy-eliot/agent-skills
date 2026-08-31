@@ -506,5 +506,59 @@
         "text": "证伪轮不得用来新增未经发现阶段的问题。"
       }
     ]
+  },
+  {
+    "id": 21,
+    "name": "docs-only-diff-takes-short-path",
+    "description": "纯文档变更走短路径，核对事实一致性而不是通读润色。",
+    "prompt": "一个 MR 只改了 4 个 Markdown：新增段落提到 `GhostSymbol` 这个符号、链接指向已删除的 docs/gone.md、示例里写着 api_key = sk_live_xxxxxxxxxxxxxxxx、runbook 新增一步 kubectl delete pod --all。change-map 的 docs_only 为真。",
+    "trap": "照常展开五视角、跑 go test 和证伪轮，在没有代码的变更上空转；或反过来把它当成无风险变更直接 LGTM；或输出一堆措辞与章节结构建议。",
+    "assertions": [
+      {
+        "id": "21.1",
+        "text": "识别 docs_only 为真，跳过五视角逐组展开、非引用类二级反例和代码验证命令。"
+      },
+      {
+        "id": "21.2",
+        "text": "按 doc_references 逐项核对：identifiers_not_found_in_code、missing_paths、possible_plaintext_secrets、code_fence_languages。"
+      },
+      {
+        "id": "21.3",
+        "text": "明文有效凭据定为 P0；缺少 namespace 与确认步骤的 kubectl delete 按其真实后果定级；失效链接与不存在的符号定为 P2。"
+      },
+      {
+        "id": "21.4",
+        "text": "不输出措辞、语气、篇幅、章节顺序类建议，也不把它们写成建议项凑数。"
+      },
+      {
+        "id": "21.5",
+        "text": "覆盖门槛不降低：doc_references 的每项异常都要给出结论或不适用理由。"
+      }
+    ]
+  },
+  {
+    "id": 22,
+    "name": "mixed-doc-and-code-diff-does-not-short-circuit",
+    "description": "文档与代码混合的变更集不走短路径，文档归入其所记录的契约变更组。",
+    "prompt": "变更集同时修改了一个导出函数的签名和描述该函数的 docs/ 文档，但文档里的参数说明仍是旧签名。change-map 的 docs_only 为假。",
+    "trap": "看到有 .md 就走文档短路径，从而跳过代码的五视角评审；或把文档当独立组单独评审，漏掉它与代码签名不一致这一事实。",
+    "assertions": [
+      {
+        "id": "22.1",
+        "text": "docs_only 为假时不得走短路径，代码部分照常五视角评审。"
+      },
+      {
+        "id": "22.2",
+        "text": "文档文件归入它所记录的契约所属的变更组，而不是单列一组。"
+      },
+      {
+        "id": "22.3",
+        "text": "文档与代码签名不一致本身作为该组的兼容性候选提出。"
+      },
+      {
+        "id": "22.4",
+        "text": "该候选按读者视角写触发条件与影响：读者按旧参数说明集成会发生什么。"
+      }
+    ]
   }
 ]
