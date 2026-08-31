@@ -16,9 +16,9 @@ Cycle Run 是主 Agent 持有的执行边界，不是第二层 Agent。以上 Wo
 
 ## 初始化预检
 
-1. 解析用户意图为 `once|loop`；歧义时使用 `once`。持久化 execution mode，再加载 [owner-policy-and-worktree.md](owner-policy-and-worktree.md) 并绑定专用 worktree 和授权。
+1. 解析用户意图为 `once|loop`；歧义时使用 `once`。持久化 execution mode，再按 [owner-policy-and-worktree.md](owner-policy-and-worktree.md) 优先绑定当前明确调用的默认授权，可选 owner policy 只作为持续授权或工作区配置来源。
 2. 确认当前运行时/容器中可使用 `bytedcli` 和 Git；记录已认证 Codebase actor，用于排除 Agent 自己的回复。
-3. 应用 [review-guard-compatibility.md](review-guard-compatibility.md)：要求唯一规范兼容包，并证明全新直接评审 Worker 能自行调用。失败时使用 `blocked_review_dependency` 停止。
+3. 应用 [review-guard-compatibility.md](review-guard-compatibility.md)：要求唯一规范兼容包，并证明全新直接评审 Worker 能自行调用。失败时使用 `blocked_review_dependency` 停止；若旧状态是尚未创建 worktree/scope/lease/业务步骤的预检阻塞，新明确调用先按 [contracts-and-state.md](contracts-and-state.md) 重新验证并恢复。
 4. 确认 source checkout 指向指定 MR 仓库；它可以为脏。创建或安全复用 MR 专用 worktree；修改工作区必须干净或由 active run 可解释。
 5. 确认主 Agent 可以创建不继承 MR 细节的全新直接叶子 Worker，并接收 [step-worker-contract.md](step-worker-contract.md) 的紧凑信封。只能把 Review 实现为 Worker 的子 Worker 时，使用 `blocked_nested_delegation` 停止。
 6. 仅 `loop`：确认运行时具有固定间隔原生调度、精确 task ID 和精确取消/查询能力。`once` 跳过全部 scheduler 预检。

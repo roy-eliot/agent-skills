@@ -37,9 +37,7 @@
     "invocation": "$review-guard"
   },
   "authorization_source": {
-    "type": "owner_policy",
-    "canonical_path": "/absolute/user-config/codebase-mr-autopilot/policy.json",
-    "sha256": "policy-file-digest",
+    "type": "explicit_skill_invocation",
     "grant_mr_url": "https://code.byted.org/org/repo/merge_requests/123"
   },
   "authorization": {
@@ -52,6 +50,8 @@
   }
 }
 ```
+
+`authorization_source.type` 也可以是 `owner_policy`；此时再记录 `canonical_path`、policy `sha256` 和精确 `grant_mr_url`。明确调用产生的默认授权与 owner policy 授权都只绑定该 MR，并使用同一组不可变动作字段。
 
 每次调用另建不可变 invocation 记录；只有 scheduler 从未启用到 active、再到 stopped 的状态字段允许按协议推进：
 
@@ -299,6 +299,7 @@ merge_gate
 - 交付前创建一个稳定 `terminal_report_id`。取消成功后，如果 report adapter 支持，使用该幂等 key 发送终止报告。只有确认交付后才记录 `terminal_reported_at`；交付结果不确定时，只能使用同一 ID 重试。绝不能用第二个 ID 生成或报告同一终止结果。
 - 终止 blocker 包括：权限不足、rebase 冲突、target 反复变化、`review-guard` 缺失/受阻、评审不完整/不收敛、CI 不收敛、反馈含义不明确、嵌套委派、非法步骤迁移、无效中文输出契约，以及 scheduler 绑定不明确。
 - 恢复时，在派发前检查终止状态、`active_probe`、`active_step`、其确定性 `result_path` 和 `step_handoff`。只能用全新的直接子级恢复已持久化步骤，或载入其已有的持久化结果。
+- 初始化尚未创建 worktree、scope、lease 或业务步骤时产生的 `blocked_permission`、`blocked_review_dependency` 属于可恢复的预检阻塞。新的明确调用必须重新验证授权和依赖；条件已经满足时，先把旧 blocker 原样归档到新 invocation 产物，再原子清除旧 `terminal_status`/`blocked_detail` 并重新初始化。不得删除或覆盖旧诊断。进入 Cycle Run 后产生的同名阻塞仍按普通终止状态处理。
 - 进入 queue 不是终止状态。
 - lease 过期后可以替换崩溃的步骤 Worker；替代者必须重新读取远端 MR/source/target head，且不得假设前一步骤的未提交工作有效。
 - 崩溃后专用 checkout 包含无法解释的变更时，应阻塞停止，不得覆盖。

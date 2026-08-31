@@ -7,7 +7,7 @@
 当前 Autopilot 版本只接受以下 `review-guard` package digest：
 
 ```text
-22f6a61c2e0ec4d233942d95f7e6968bc4d51babc782e4206f458bfc65862b09
+1d303873c29259b242d023f7822a78c5be9c77558a6009e4d2a5cbbcc5374d72
 ```
 
 按相对 POSIX 路径排序普通包文件并计算 SHA-256。对每个文件依次输入 `UTF-8 path`、NUL、原始字节、NUL。排除 `.git`、`.DS_Store`、`__pycache__` 和 `*.pyc`。

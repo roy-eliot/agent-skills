@@ -17,7 +17,7 @@ MR：<exact URL>
 步骤类型：<step-kind>
 输入产物：<artifact paths with sha256>
 授权：<persisted scope subset>
-授权来源：<explicit grant or owner-policy path and digest>
+授权来源：<explicit_skill_invocation 或 owner-policy path and digest>
 评审 Skill：位于 <package root> 的 review-guard，digest 为 <package digest>
 所有自然语言字段使用简体中文。详细信息写入步骤目录，只返回紧凑 Step Result Envelope。
 ```

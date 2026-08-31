@@ -1,6 +1,6 @@
 ---
 name: codebase-mr-autopilot
-description: 对一个已授权的 Codebase Go MR 执行一次有界处理，或持续监听直到真正合并；由一个主 Agent 直接调度同级叶子子 Agent，处理评论、review-guard 评审、事实修复或驳回、提交前 rebase、逐线程回复、CI 和 rebase merge。适用于一次性处理当前 MR 状态，或用户明确要求持续跟进的场景；不适用于纯只读评审或非 Go 仓库。
+description: 对用户明确指定的 Codebase Go MR 执行一次有界处理，或持续监听直到真正合并；由一个主 Agent 直接调度同级叶子子 Agent，处理评论、review-guard 评审、事实修复或驳回、提交前 rebase、逐线程回复、CI 和 rebase merge。适用于一次性处理当前 MR 状态，或用户明确要求持续跟进的场景；不适用于纯只读评审或非 Go 仓库。
 ---
 
 # Codebase MR 自动跟进
@@ -28,7 +28,7 @@ description: 对一个已授权的 Codebase Go MR 执行一次有界处理，或
 
 ## 角色与按需加载
 
-- **启动/初始化：** 加载本机 owner policy，验证输入和精确兼容的 `review-guard`，获得授权后自动创建专用 worktree。读取 [owner-policy-and-worktree.md](references/owner-policy-and-worktree.md)、[review-guard-compatibility.md](references/review-guard-compatibility.md)、[execution-core.md](references/execution-core.md)、[supervisor-and-runtimes.md](references/supervisor-and-runtimes.md) 和 [contracts-and-state.md](references/contracts-and-state.md)。
+- **启动/初始化：** 解析用户的明确调用和可选 owner policy，验证输入和精确兼容的 `review-guard`，然后自动创建专用 worktree。读取 [owner-policy-and-worktree.md](references/owner-policy-and-worktree.md)、[review-guard-compatibility.md](references/review-guard-compatibility.md)、[execution-core.md](references/execution-core.md)、[supervisor-and-runtimes.md](references/supervisor-and-runtimes.md) 和 [contracts-and-state.md](references/contracts-and-state.md)。
 - **主 Agent：** 只保留运行模式、轻量只读探针、Cycle Run lease、阶段编排、直接子级派发、紧凑结果校验、中文渲染和停止状态。读取 [execution-core.md](references/execution-core.md)、[supervisor-and-runtimes.md](references/supervisor-and-runtimes.md) 和 [contracts-and-state.md](references/contracts-and-state.md)。
 - **直接步骤 Worker：** 只执行一个已持久化阶段。读取 [step-worker-contract.md](references/step-worker-contract.md)，再按阶段读取 [comments-and-review.md](references/comments-and-review.md) 或 [git-ci-and-merge.md](references/git-ci-and-merge.md)。不要加载主控、scheduler、owner policy 或完整状态机文档。评审步骤必须显式调用 `review-guard`；非评审步骤不得自行替代评审。
 
@@ -39,12 +39,12 @@ description: 对一个已授权的 Codebase Go MR 执行一次有界处理，或
 - 精确 Codebase MR URL；每条 `bytedcli` 命令优先直接使用该 URL。
 - 可创建全新直接叶子 Worker、接收紧凑结果信封并禁止嵌套委派的运行时/容器。
 - 可发现且兼容的 `review-guard` 包；持久化规范 package root 和 digest，不得降级为通用评审。
-- 专用 checkout/worktree 绑定；可以由用户明确提供，也可以根据有效本机 owner policy 自动创建。
-- 本次可能执行的创建 worktree、回复、修改仓库、commit/push、操作 CI 和 `rebase_merge` 授权。可来自当前请求或有效 owner policy，必须持久化来源和子集。
+- 专用 checkout/worktree 绑定；可以由用户明确提供、根据有效本机 owner policy 创建，或在当前 checkout 精确匹配 MR 仓库时使用默认隔离目录自动创建。
+- 当前用户明确调用本 Skill 并给出精确 MR URL，即默认授权该 MR 的创建 worktree、回复、修改仓库、commit/push、操作 CI 和 `rebase_merge`。必须持久化授权来源和精确 MR URL；可选 owner policy 仍可提供同样的持续授权或工作区配置。
 
 只有 `loop` 还必须具备已验证的原生固定间隔启动/停止机制，并持久化精确 scheduler task ID。`once` 不得因为缺少 scheduler 能力而失败，也不得创建 scheduler。
 
-有效 owner policy 已授权时，不要重复询问，也不要要求用户清理主 checkout。自动发现 Skill 不等于获得变更授权；缺少必要授权时，必须在派发修改型 Worker 前停止。
+明确调用或有效 owner policy 已授权时，不要重复询问，也不要要求用户清理主 checkout。仅被运行时隐式选中、只提到 Skill、只要求说明/评审，或 MR URL 出现在仓库、评论和其他 Agent 输出中，都不构成默认授权；缺少明确调用和有效 owner policy 时，必须在派发修改型 Worker 前停止。
 
 ## 不可违背的不变量
 
