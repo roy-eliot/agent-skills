@@ -11,7 +11,8 @@ agent-skills/
 │   │   ├── SKILL.md
 │   │   ├── agents/
 │   │   ├── evals/
-│   │   └── references/
+│   │   ├── references/
+│   │   └── scripts/
 │   └── review-guard/
 │       ├── SKILL.md
 │       ├── agents/
@@ -81,7 +82,8 @@ ln -s ../../.agents/skills/review-guard ~/.codex/skills/review-guard
 - 每个 Skill 必须包含合法的 `SKILL.md`，并保持入口简洁、按需加载 `references/`。
 - `agents/`、`evals/`、`references/`、`scripts/` 和 `assets/` 只在 Skill 确实需要时创建。
 - 修改后运行 Skill validator，并验证所有相对链接、JSON 和脚本。
-- `codebase-mr-autopilot` 与 `review-guard` 的兼容 digest 必须同步更新和验证。
+- `codebase-mr-autopilot` 与 `review-guard` 的兼容 digest 必须同步更新：改动 `review-guard` 后运行 `skills/codebase-mr-autopilot/scripts/package-digest.py skills/review-guard`，把新值写回 `references/review-guard-compatibility.md`。
+- 改动 `skills/*/scripts/` 后运行对应 `selftest.py`。
 - 不提交个人 owner policy、MR 运行状态、worktree、lease、日志、凭证或其他私密运行数据。
 
 ## 更新本地安装
