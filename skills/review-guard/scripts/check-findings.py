@@ -9,7 +9,8 @@ findings.json 可以是数组，或含 "findings" 键的对象。
 退出码：0 通过；4 违反问题契约。违规原因用简体中文输出到 stderr。
 
 只校验能机器判定的部分：词汇表、必填字段、锚点是否真实存在、锚点是否落在变更行
-上、中文输出、按 fingerprint 去重、数量上限。它不判断问题本身是否成立。
+上（容差 ±10 行；越界时须由 anchor_note 说明）、中文输出、按 fingerprint 去重、数量上限。它
+不判断问题本身是否成立。
 """
 import hashlib
 import json
@@ -21,6 +22,7 @@ import sys
 SEVERITY = ("P0", "P1", "P2")
 MIN_CONFIDENCE = 7
 MAX_REPORTED = 5
+ANCHOR_SLACK = 10
 REQUIRED = ("severity", "confidence", "file", "trigger", "impact", "evidence", "action")
 ZH_FIELDS = ("trigger", "impact", "evidence", "action")
 
@@ -98,14 +100,18 @@ def check(findings, repo=None, head=None, change_map=None, allow_open=False):
             elif total is not None and end > total:
                 problems.append(f"{tag}：行锚点 {line}-{end} 超出文件行数 {total}（行号已过期）")
             if change_map:
-                if f.get("file") not in changed:
-                    problems.append(f"{tag}：锚点文件不在本次变更集内，且未标注审计边界理由")
-                else:
-                    spans = hunks.get(f.get("file"), [])
-                    if spans and not any(a <= line <= b for a, b in spans):
-                        problems.append(
-                            f"{tag}：行锚点 {line} 不在变更行上（该文件变更区间 {spans}）；"
-                            "如确属被变更暴露的既有代码，须在 evidence 中说明")
+                note = str(f.get("anchor_note", "")).strip()
+                spans = hunks.get(f.get("file"), [])
+                off_change = f.get("file") not in changed or (
+                    spans and not any(a - ANCHOR_SLACK <= line <= b + ANCHOR_SLACK
+                                      for a, b in spans))
+                if off_change and not note:
+                    problems.append(
+                        f"{tag}：锚点不在本次变更行上（文件在变更集内={f.get('file') in changed}，"
+                        f"变更区间 {spans}，容差 ±{ANCHOR_SLACK}）；如确属被本次变更暴露的既有代码或"
+                        "审计边界内代码，须在 anchor_note 用中文说明理由，不得靠删除问题通过校验")
+                elif off_change and not has_zh(note):
+                    problems.append(f"{tag}：anchor_note 不含简体中文")
 
         fp, want = f.get("fingerprint"), fingerprint(f)
         if fp and fp != want:

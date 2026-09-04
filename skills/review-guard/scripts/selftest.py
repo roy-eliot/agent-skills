@@ -206,12 +206,25 @@ def test_check_findings():
         assert "在锁定 head 上不存在" in cf.check([_f(file="pkg/missing.go")], repo=d)[0]
         assert cf.check([_f()], repo=d, head="HEAD") == []
 
-        cmap = {"changed_files": ["pkg/a.go"], "hunk_lines": {"pkg/a.go": [[3, 3]]}}
+        write(d, "pkg/long.go", "package pkg\n" * 60)
+        git(d, "add", "-A")
+        git(d, "commit", "-qm", "long")
+        cmap = {"changed_files": ["pkg/a.go", "pkg/long.go"],
+                "hunk_lines": {"pkg/a.go": [[3, 3]], "pkg/long.go": [[3, 3]]}}
         assert cf.check([_f(line_start=3)], repo=d, change_map=cmap) == []
-        assert "不在变更行上" in cf.check([_f(line_start=1)], repo=d, change_map=cmap)[0]
-        assert any("不在本次变更集内" in x
+        assert cf.check([_f(line_start=1)], repo=d, change_map=cmap) == []   # ±10 容差内
+        far = dict(file="pkg/long.go", line_start=40)
+        assert "锚点不在本次变更行上" in cf.check([_f(**far)], repo=d, change_map=cmap)[0]
+        # 越界不是删问题的理由：补中文 anchor_note 即可通过
+        assert cf.check([_f(anchor_note="签名变更后未更新的既有调用方", **far)],
+                        repo=d, change_map=cmap) == []
+        assert "anchor_note 不含简体中文" in cf.check(
+            [_f(anchor_note="pre-existing caller", **far)], repo=d, change_map=cmap)[0]
+        assert any("锚点不在本次变更行上" in x
                    for x in cf.check([_f(file="pkg/other.go", line_start=1)],
                                      repo=d, change_map=cmap))
+        assert cf.check([_f(file="pkg/a.go", line_start=1, anchor_note="审计边界内的既有代码")],
+                        repo=d, change_map=cmap) == []
 
     # 退出码
     with tempfile.TemporaryDirectory() as d:

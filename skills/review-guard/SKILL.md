@@ -23,7 +23,7 @@ description: 用于评审 Go 项目的 MR/PR、分支、提交范围、工作区
 6. **按规模复核。** 小变更（不超过 5 个文件且不超过 500 行）：主链评审、独立反例/跨契约复核，再加一次只针对已确认候选的证伪轮。大变更：按组覆盖全部文件、高风险组做第二次独立发现轮、跨组校验，最后收敛前全局复核一次并抽样复检已淘汰候选。每轮独立记录，不得先读上一轮结论再确认。只有用户和运行时均授权委派时才可使用子 Agent；否则使用相互独立的串行轮次完成同样覆盖，不能抽样代替。
 7. **仅在有价值时增加可维护性深度。** 如果用户要求完整/深度评审、架构或代码质量判断、简化、重构或可直接修复的指导，读取 [maintainability-and-refactoring.md](references/maintainability-and-refactoring.md)。非缺陷建议必须与 P0-P2 问题及合并结论分开。
 8. **按风险比例验证。** 从 `go.mod`、workspace 文件、Makefile/Taskfile、CI 和仓库指令中发现项目原生检查。优先执行聚焦的编译/测试；仅当变更风险确有需要且命令安全时，才增加 `-race`、集成、schema 或部署检查。测试通过绝不能作为评审问题不成立的证明。
-9. **筛选并收敛。** 对候选问题进行复现、代码追踪和反证，把已证实问题锚定到当前变更行为，移除重复、过时或已解决的问题，并应用 [finding-and-report-contract.md](references/finding-and-report-contract.md)。输出前用 [check-findings.py](scripts/check-findings.py) 校验问题清单，不通过不得出报告。最终收敛只合并发现阶段的结果，不得借收敛过程偷偷扩大范围或重新评审。
+9. **筛选并收敛。** 对候选问题进行复现、代码追踪和反证，把已证实问题锚定到当前变更行为，移除重复、过时或已解决的问题，并应用 [finding-and-report-contract.md](references/finding-and-report-contract.md)。输出前用 [check-findings.py](scripts/check-findings.py) 校验问题清单，不通过不得出报告；校验失败只能通过修正锚点、补 `anchor_note` 或补齐必填字段来解决，绝不能靠删除已证实问题来换取通过。最终收敛只合并发现阶段的结果，不得借收敛过程偷偷扩大范围或重新评审。
 
 ## 脚本
 
