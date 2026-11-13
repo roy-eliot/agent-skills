@@ -1,0 +1,51 @@
+{
+  "level": "L2",
+  "theme": "blue",
+  "title": "🔗 技术链路分析",
+  "subtitle": "代码事实与边界",
+  "summary": "<font color='blue'>一句话结论：</font>核心结论放在这里。第二句说明影响范围，必要时用<font color='orange'>短语义色</font>标记约束或未验证边界。",
+  "status_tag": "分析完成",
+  "sections": [
+    {
+      "type": "markdown",
+      "title": "🔗 主链路",
+      "content": "<font color='blue'>① 入口</font> `POST /api/example`<br>↓<br><font color='blue'>② 服务 A</font> 召回候选<br>↓<br><font color='orange'>③ 条件过滤</font> 过滤无效候选<br>↓<br><font color='green'>④ 结果</font> 返回首个有效候选"
+    },
+    {
+      "type": "table",
+      "title": "🎯 关键映射",
+      "columns": [
+        {
+          "name": "condition",
+          "display_name": "条件",
+          "data_type": "lark_md"
+        },
+        {
+          "name": "result",
+          "display_name": "结果",
+          "data_type": "lark_md"
+        }
+      ],
+      "rows": [
+        {
+          "condition": "🎯 条件 A",
+          "result": "<font color='green'>处理路径 A</font>"
+        },
+        {
+          "condition": "⚠️ 条件 B",
+          "result": "<font color='orange'>降级或待确认</font>"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "title": "📌 边界",
+      "content": "<font color='blue'>代码事实</font>、<font color='green'>已验证线上事实</font>与<font color='orange'>推断/未验证范围</font>必须明确区分；颜色只强调短标签，正文仍需自包含。"
+    },
+    {
+      "type": "collapsible",
+      "title": "📂 代码证据（点击展开）",
+      "content": "- `path/file.go:42`：关键符号与证据\n- 未覆盖范围：说明"
+    }
+  ]
+}

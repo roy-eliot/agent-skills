@@ -1,0 +1,76 @@
+{
+  "level": "L2",
+  "theme": "orange",
+  "title": "⚠️ 仓库清理评估（示例）",
+  "subtitle": "目录关系、独有资产与清理边界",
+  "status_tag": "仅完成只读核验",
+  "summary": "<font color=\"orange\">暂不能整目录删除。</font>仓库代码已有另一份副本，但原目录还保存着未提交改动和独立文件。",
+  "sections": [
+    {
+      "type": "table",
+      "title": "🧭 哪些判断成立",
+      "columns": [
+        {
+          "name": "question",
+          "display_name": "判断",
+          "data_type": "lark_md"
+        },
+        {
+          "name": "result",
+          "display_name": "核验结果",
+          "data_type": "lark_md"
+        }
+      ],
+      "rows": [
+        {
+          "question": "两份目录是否为独立 clone",
+          "result": "<font color=\"green\">是</font>；各自有独立的 `.git`。"
+        },
+        {
+          "question": "远端仓库是否已有另一份副本",
+          "result": "<font color=\"green\">是</font>；已按 `origin` 逐仓对应。"
+        },
+        {
+          "question": "现在能否整目录删除",
+          "result": "<font color=\"red\">不能</font>；仍有只存在本地的资产。"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "📌 需要保留的内容",
+      "columns": [
+        {
+          "name": "asset",
+          "display_name": "本地资产",
+          "data_type": "lark_md"
+        },
+        {
+          "name": "handling",
+          "display_name": "处理依据",
+          "data_type": "lark_md"
+        }
+      ],
+      "rows": [
+        {
+          "asset": "📝 未提交改动",
+          "handling": "先逐仓确认归属，再决定迁移位置。"
+        },
+        {
+          "asset": "📂 非仓库文件",
+          "handling": "单独核对用途，不能按仓库副本替代。"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "title": "✅ 可以怎么收敛",
+      "content": "先列出独有资产及保留位置；确认迁移完成后，再评估可清理目录。本次核验没有执行删除。"
+    },
+    {
+      "type": "collapsible",
+      "title": "📂 证据与边界（点击展开）",
+      "content": "示例证据：仓库 remote 对照、工作区状态、目录清单。\n示例边界：未验证文件能否丢弃，未执行迁移或删除。"
+    }
+  ]
+}

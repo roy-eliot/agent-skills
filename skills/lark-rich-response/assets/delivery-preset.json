@@ -1,0 +1,18 @@
+{
+  "level": "L2",
+  "preset": "delivery",
+  "theme": "blue",
+  "title": "📝 文档修订（示例）",
+  "subtitle": "交付、验证与未完成范围",
+  "status_tag": "待评审",
+  "summary": "修订稿已更新，仍需核对实际页面。",
+  "deliverables": [
+    {"label": "正文组织", "verdict": "已调整", "tone": "blue", "detail": "结论前置，重复依据合并"},
+    {"label": "模板默认内容", "verdict": "保留", "tone": "green", "detail": "未涉及字段原样保留"}
+  ],
+  "checks": [
+    {"label": "结构核对", "verdict": "通过", "tone": "green", "detail": "标题、字段及资源引用一致"},
+    {"label": "实际页面", "verdict": "尚未核验", "tone": "orange"}
+  ],
+  "evidence": "示例证据：当前修订回读。示例状态不可直接复用于真实交付。"
+}
