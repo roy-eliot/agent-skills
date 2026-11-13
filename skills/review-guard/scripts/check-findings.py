@@ -131,7 +131,7 @@ def check(findings, repo=None, head=None, change_map=None, allow_open=False):
 
 
 def main(argv):
-    if not argv:
+    if not argv or argv[0] in ("-h", "--help"):
         raise SystemExit(__doc__)
     path, repo, head, cmap, allow_open = argv[0], None, None, None, False
     i = 1

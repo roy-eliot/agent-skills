@@ -291,7 +291,6 @@ def go_modules(repo, changed):
 
 def main(argv):
     args = dict(repo=None, base=None, head=None, rng=None, wt=False, out=None)
-    it = iter(range(len(argv)))
     i = 0
     while i < len(argv):
         a = argv[i]
