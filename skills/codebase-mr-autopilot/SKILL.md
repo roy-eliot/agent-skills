@@ -69,7 +69,7 @@ description: 对用户明确指定的 Codebase Go MR 执行一次有界处理，
 7. 批次提交前恰好再补充扫描一次评论。cutoff 后到达的评论留给下一次 Cycle Run；单个 Cycle Run 最多处理一个评论批次和一个 CI 批次。
 8. 每次提交前都要 rebase。target 前进时按三级判据处理：与本批次影响闭包空交集且无冲突则只重跑受影响验证、不消耗任何额度；实质重叠才消耗独立的重绑定配额。rebase 是可证明的 no-op 时可复用输入完全一致的验证证据。
 9. 每次评审都由全新的直接评审 Worker 调用 `review-guard`。收敛预算每批最多三次评审和两次自动修复；target 重绑定另有最多两次的独立配额，两者绝不能互相抵扣。不得使用内部降级 Reviewer。
-10. R1 是完整 MR 发现型评审。R2 默认评审修复增量及受影响契约，命中 [comments-and-review.md](references/comments-and-review.md) 的回退条件时改为完整预期 MR 评审。R3 只做有界定向验证。
+10. R1 是完整 MR 发现型评审；但 `source_head` 变化本身不构成重新评审的理由，按 [execution-core.md](references/execution-core.md) 的评审结论复用先判定整体复用（零评审调用）或只评审 source 追加 delta。R2 默认评审修复增量及受影响契约，命中 [comments-and-review.md](references/comments-and-review.md) 的回退条件时改为完整预期 MR 评审。R3 只做有界定向验证。
 11. 在每个相关 Codebase 线程中回复。绝不能 resolve 或关闭 Reviewer 评论；关闭权属于 Reviewer。
 12. 先诊断 CI，再执行操作。相同 `HEAD + check + failure fingerprint` 默认最多重试一次。
 13. 绝不能执行无保护 force push。只有 rebase 改写已授权 MR 分支时，才使用精确 `--force-with-lease=<branch>:<expected-sha>`。

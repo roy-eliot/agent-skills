@@ -92,22 +92,45 @@ intake_sync
 
 ## 评审结论复用
 
-评审是全流程最贵的一步，输入完全一致时不得重复执行。缓存键：
+评审是全流程最贵的一步，输入内容一致时不得重复执行。缓存键只绑定评审真正的输入内容，**不绑定 commit 身份**：
 
 ```text
-source_head + review_guard_digest + prospective_patch_sha256
+prospective_patch_sha256 + review_guard_digest
 ```
 
-同键的已完成评审结论可以复用，条件是全部成立：
+`source_head` 前进本身不是重新评审的理由。频繁 commit、amend、force-push、纯 rebase 都会改变 `source_head`，其中大部分不改变待评审内容，或只是无关追加；把 `source_head` 写进缓存键会让同一份代码被反复全量评审。
+
+### 完全复用：零评审调用
+
+同键的已完成评审结论可以整体复用，条件全部成立：
 
 - 缓存记录来自同一个不可变范围（同一 MR、同一 worktree 绑定、同一 review-guard package digest）；
-- `source_head` 与 `prospective_patch_sha256` 与当前值逐一相等；
-- 自缓存以来的 target 变化全部通过 [git-ci-and-merge.md](git-ci-and-merge.md) 的空交集判据，即 `overlap` 始终为空；
+- 当前重算的 `prospective_patch_sha256` 与缓存值相等（`source_head` 是否变化不影响该判定）；
+- 自缓存以来的 target 变化全部通过 [git-ci-and-merge.md](git-ci-and-merge.md) 的空交集判据，即 `overlap` 始终为空且 rebase 无冲突；
 - 原生报告和证据产物仍存在且 hash 匹配。
 
-命中时跳过对应评审步骤，把缓存结论写入新的 review manifest，并记录 `reused_from`（原步骤 result 路径）、原 digest 三元组和复用理由；不消耗评审轮次。任一条件不成立、证据缺失或 target 出现实质 churn 时，重新执行评审。
+命中时跳过对应评审步骤，把缓存结论写入新的 review manifest，并记录 `reused_from`（原步骤 result 路径）、原 digest 对、原 `source_head` 和复用理由；不消耗评审轮次。
 
-这条规则对 R1 收益最大：Reviewer 追加一条评论不会改变 `source_head`，此时上一轮的 R1 发现集可以整体复用，只需重跑评论分类与合并。
+### 增量复用：只评审新增 delta
+
+`prospective_patch_sha256` 变了，但变化完全来自 source 分支上的追加 commit 时，先算 source delta：
+
+```text
+source_delta = git diff <cached_source_head> <current_source_head>
+delta_closure = source_delta 修改路径 + 直接契约路径 + 测试路径
+```
+
+以下全部成立时，R1 降级为 `scope_mode=incremental_source_delta`，只评审 `source_delta` 及其影响闭包，缓存中的既有发现集原样保留：
+
+- `cached_source_head` 到当前 head 是快进，历史未被改写（无 amend、无丢弃 commit）；
+- rebase 到最新 target 无冲突，且与 target 变化的 `overlap` 为空；
+- `delta_closure` 与缓存结论中所有未解决 finding 的路径/符号无交集；
+- review-guard package digest 未变；
+- 影响闭包按 [comments-and-review.md](comments-and-review.md) 的构建步骤可证明，且未命中该文的全量回退条件清单。
+
+任一条件不成立、历史被改写、证据缺失，或 target 出现实质 churn 时，回退为完整 R1。增量 R1 与完整 R1 同样计一次评审轮次——它省的是评审范围和耗时，不是预算。
+
+复用判定必须写入 review manifest：缓存键、`cached_source_head`、当前 `source_head`、命中的复用档位（`full|incremental|none`）和判定证据。证据不全时按 `none` 处理。
 
 ## 模式外壳
 

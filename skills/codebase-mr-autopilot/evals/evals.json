@@ -778,26 +778,51 @@
   },
   {
     "id": 34,
-    "name": "r1-reused-when-source-and-digest-unchanged",
-    "description": "输入完全一致时复用上一轮 R1 发现集，不重复执行最贵的评审。",
-    "prompt": "上一个 run 的 R1 已完成并留有产物。Reviewer 追加了一条新评论，source_head、review-guard digest 和 prospective patch digest 都没有变化，期间 target 的前进全部通过空交集判据。",
-    "trap": "无条件重跑完整 R1，17 分钟白烧；或反过来在 source_head 已变、或期间发生实质 churn 时仍然复用陈旧结论。",
+    "name": "r1-reused-when-content-digest-unchanged",
+    "description": "缓存键只绑定评审输入内容，source_head 前进不触发完整重跑。",
+    "prompt": "上一个 run 的 R1 已完成并留有产物。Reviewer 追加了一条新评论；source 分支做了一次纯 rebase 导致 source_head 改变，但 prospective patch digest、review-guard digest 都没有变化，期间 target 的前进全部通过空交集判据。",
+    "trap": "把 source_head 写进缓存键，于是同一份代码被重新全量评审 17 分钟；或反过来在 patch digest 或 review-guard digest 变化、证据缺失时仍然复用陈旧结论。",
     "assertions": [
       {
         "id": "34.1",
-        "text": "校验 source_head、review_guard_digest、prospective_patch_sha256 三者相等，且期间 overlap 始终为空。"
+        "text": "缓存键只用 prospective_patch_sha256 与 review_guard_digest；source_head 差异单独记录，不参与复用判定。"
       },
       {
         "id": "34.2",
-        "text": "命中时跳过 review_r1 步骤，把缓存结论写入新的 review manifest，并记录 reused_from、原 digest 三元组与复用理由。"
+        "text": "命中时跳过 review_r1 步骤，不发起任何评审调用，把缓存结论写入新的 review manifest，并记录 reused_from、原 digest 对、原 source_head 和复用档位 full。"
       },
       {
         "id": "34.3",
-        "text": "复用不消耗评审轮次。"
+        "text": "复用不消耗评审轮次，且只在期间 overlap 始终为空、rebase 无冲突、证据产物 hash 匹配时成立。"
       },
       {
         "id": "34.4",
-        "text": "任一条件不成立、证据产物缺失或发生实质 churn 时，重新执行完整 R1。"
+        "text": "任一条件不成立、证据产物缺失或 target 出现实质 churn 时回退，并在 manifest 记录档位 none。"
+      }
+    ]
+  },
+  {
+    "id": 35,
+    "name": "source-append-gets-incremental-review-not-full-rerun",
+    "description": "source_head 前进来自快进追加时只评审新增 delta，既有发现集原样保留。",
+    "prompt": "上一个 run 的 R1 已完成并留有发现集。Reviewer 在两个线程上分别要求补一处单测和一处错误信息文案。source 分支在此基础上追加两个 commit，只改 pkg/x/service.go 与 pkg/x/service_test.go，未 amend、未丢弃历史；rebase 到最新 target 无冲突；target 前进与本次 delta 的 overlap 为空；review-guard digest 未变；delta 影响闭包与所有未解决 finding 的路径/符号无交集。",
+    "trap": "把 source_head 变化当成重跑完整 R1 的理由；或反过来在历史被改写、overlap 非空、闭包与未解决 finding 相交时仍然只评审 delta。",
+    "assertions": [
+      {
+        "id": "35.1",
+        "text": "先算 source_delta = git diff <cached_source_head> <current_source_head>，再按修改路径、直接契约路径和测试路径构建 delta_closure。"
+      },
+      {
+        "id": "35.2",
+        "text": "快进、无冲突空交集、闭包与未解决 finding 无交集、guard digest 未变、闭包可证明这五项全部成立时，以 scope_mode=incremental_source_delta 只评审该 delta 及其闭包，既有发现集原样保留。"
+      },
+      {
+        "id": "35.3",
+        "text": "增量评审与完整评审同样计一次评审轮次；它省的是评审范围和耗时，不是预算。"
+      },
+      {
+        "id": "35.4",
+        "text": "历史被改写、overlap 非空、闭包与未解决 finding 相交、digest 变化或证据不全时回退为完整 R1，并在 manifest 记录档位 none 与判定证据。"
       }
     ]
   }

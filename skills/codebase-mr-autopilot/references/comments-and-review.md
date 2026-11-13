@@ -58,7 +58,7 @@ open 不代表尚未修复。Reviewer 是否关闭线程与 Agent 是否完成�
   "review_skill_digest_before": "sha256",
   "review_skill_digest_after": "sha256",
   "scope": {
-    "scope_mode": "prospective_rebased_mr|incremental_fix_impact|prospective_final_mr|targeted_fix_delta",
+    "scope_mode": "prospective_rebased_mr|incremental_source_delta|incremental_fix_impact|prospective_final_mr|targeted_fix_delta",
     "observed_remote_patchset": "host-patchset-id",
     "target_head_sha": "sha",
     "source_head_sha": "sha",
@@ -105,7 +105,7 @@ open 不代表尚未修复。Reviewer 是否关闭线程与 Agent 是否完成�
 
 ## R1 Reviewer 契约
 
-R1 在 `intake_sync` 初始 rebase 后、评论聚合完成前运行。其边界从明确 target SHA 到完成 rebase 的精确私有 worktree head。由于这个预期 head 可能尚未成为远端 MR patchset，不要让 `review-guard` 根据 MR URL 推断 ref；应使用明确 base/head 范围调用，单独记录观测到的远端 patchset，并且只有这些本地 SHA 和 diff hash 保持不变时才能应用结果。R1 是发现型评审，但不是全仓审计或可维护性评审。派发 R1 前先按 [execution-core.md](execution-core.md) 的评审结论复用检查缓存：`source_head`、`review_guard_digest` 和 `prospective_patch_sha256` 三者未变且期间没有实质 target churn 时，复用上一轮 R1 发现集，不重复执行完整评审。
+R1 在 `intake_sync` 初始 rebase 后、评论聚合完成前运行。其边界从明确 target SHA 到完成 rebase 的精确私有 worktree head。由于这个预期 head 可能尚未成为远端 MR patchset，不要让 `review-guard` 根据 MR URL 推断 ref；应使用明确 base/head 范围调用，单独记录观测到的远端 patchset，并且只有这些本地 SHA 和 diff hash 保持不变时才能应用结果。R1 是发现型评审，但不是全仓审计或可维护性评审。派发 R1 前先按 [execution-core.md](execution-core.md) 的评审结论复用检查缓存：`prospective_patch_sha256` 与 `review_guard_digest` 未变且期间没有实质 target churn 时，整体复用上一轮 R1 发现集，不发起任何评审调用；内容变化仅来自 source 上的快进追加 commit、且 delta 影响闭包与未解决 finding 无交集时，R1 以 `scope_mode=incremental_source_delta` 只评审该 delta 及其闭包。`source_head` 变化本身不是重跑完整 R1 的理由。
 
 ## R2 影响闭包、全量回退与 R3 覆盖
 
