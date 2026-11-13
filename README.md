@@ -13,6 +13,10 @@ agent-skills/
 │   │   ├── evals/
 │   │   ├── references/
 │   │   └── scripts/
+│   ├── lark-rich-response/
+│   │   ├── SKILL.md
+│   │   ├── assets/
+│   │   └── scripts/
 │   └── review-guard/
 │       ├── SKILL.md
 │       ├── agents/
@@ -31,10 +35,13 @@ agent-skills/
 |---|---|---|
 | `codebase-mr-autopilot` | 一次处理或持续跟进一个已授权的 Codebase Go MR，处理评论、修复、CI、rebase 和合并 | `review-guard` |
 | `review-guard` | 对 Go MR、分支、提交范围或工作区变更进行证据驱动的只读 Review | 无 |
+| `lark-rich-response` | 生成并校验 Lark schema 2.0 卡片 JSON（结构化分析、方案、评审、诊断、交付报告），只做本地生成与自检，不负责发送 | 无（仅需 Python 3） |
 
 `codebase-mr-autopilot` 与 `review-guard` 是并列 Skill。Autopilot 的 R1/R2/R3 Review 会调用独立的 `review-guard`，因此使用 Autopilot 时必须同时安装两者。不要把 `review-guard` 复制进 Autopilot 目录，也不要在多个发现目录中保留不同实体的同名副本。
 
-两个 Skill 的说明、流程、评测描述和用户可见提示均使用简体中文。为保证跨运行时兼容，Skill 名称、命令、文件路径、JSON key、状态枚举和代码符号仍保留英文原值。
+`lark-rich-response` 是独立的卡片生成 Skill：产出可移植的 JSON 文件，发送由调用环境中已授权的 Lark 集成负责。它不依赖另外两个 Skill，也不参与 MR 处理流程。
+
+`codebase-mr-autopilot` 与 `review-guard` 的说明、流程、评测描述和用户可见提示均使用简体中文。`lark-rich-response` 沿用其分发版的英文正文与示例。为保证跨运行时兼容，Skill 名称、命令、文件路径、JSON key、状态枚举和代码符号仍保留英文原值。
 
 ### Autopilot 运行模式
 
@@ -55,6 +62,7 @@ Autopilot 的业务流程只有一个有界 `Cycle Run`，外层支持两种模�
 mkdir -p ~/.agents/skills
 ln -s <repo>/skills/codebase-mr-autopilot ~/.agents/skills/codebase-mr-autopilot
 ln -s <repo>/skills/review-guard ~/.agents/skills/review-guard
+ln -s <repo>/skills/lark-rich-response ~/.agents/skills/lark-rich-response
 ```
 
 ### Claude Code
@@ -63,6 +71,7 @@ ln -s <repo>/skills/review-guard ~/.agents/skills/review-guard
 mkdir -p ~/.claude/skills
 ln -s ../../.agents/skills/codebase-mr-autopilot ~/.claude/skills/codebase-mr-autopilot
 ln -s ../../.agents/skills/review-guard ~/.claude/skills/review-guard
+ln -s ../../.agents/skills/lark-rich-response ~/.claude/skills/lark-rich-response
 ```
 
 ### Codex
@@ -73,6 +82,7 @@ ln -s ../../.agents/skills/review-guard ~/.claude/skills/review-guard
 mkdir -p ~/.codex/skills
 ln -s ../../.agents/skills/codebase-mr-autopilot ~/.codex/skills/codebase-mr-autopilot
 ln -s ../../.agents/skills/review-guard ~/.codex/skills/review-guard
+ln -s ../../.agents/skills/lark-rich-response ~/.codex/skills/lark-rich-response
 ```
 
 安装前先检查目标路径；如果已经存在同名目录或链接，应先比较并确定唯一 canonical copy，不要直接覆盖。
@@ -83,7 +93,7 @@ ln -s ../../.agents/skills/review-guard ~/.codex/skills/review-guard
 - `agents/`、`evals/`、`references/`、`scripts/` 和 `assets/` 只在 Skill 确实需要时创建。
 - 修改后运行 Skill validator，并验证所有相对链接、JSON 和脚本。
 - `codebase-mr-autopilot` 与 `review-guard` 的兼容 digest 必须同步更新：改动 `review-guard` 后运行 `skills/codebase-mr-autopilot/scripts/package-digest.py skills/review-guard`，把新值写回 `references/review-guard-compatibility.md`。
-- 改动 `skills/*/scripts/` 后运行对应 `selftest.py`。
+- 改动 `skills/*/scripts/` 后运行该 Skill 的自检：`selftest.py`（两个 MR Skill）或 `test_build_card.py`（`lark-rich-response`）。
 - 不提交个人 owner policy、MR 运行状态、worktree、lease、日志、凭证或其他私密运行数据。
 
 ## 更新本地安装
