@@ -113,7 +113,7 @@ def check(result_path, active_step_path=None):
 
 
 def main(argv):
-    if not argv:
+    if not argv or argv[0] in ("-h", "--help"):
         raise SystemExit(__doc__)
     active = argv[argv.index("--active-step") + 1] if "--active-step" in argv else None
     contract, transition = check(argv[0], active)

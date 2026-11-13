@@ -192,7 +192,7 @@ def fingerprint(p):
 
 
 def main(argv):
-    if not argv:
+    if not argv or argv[0] in ("-h", "--help"):
         raise SystemExit(__doc__)
     url = argv[0]
     raw_dir = argv[argv.index("--raw-dir") + 1] if "--raw-dir" in argv else None
